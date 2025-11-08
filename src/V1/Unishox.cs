@@ -1,4 +1,5 @@
 using System.Buffers;
+using UnishoxSharp.Common;
 
 namespace UnishoxSharp.V1;
 
@@ -138,9 +139,8 @@ public class Unishox
         L95[0] = 3;
     }
 
-    static ReadOnlySpan<uint> Mask => [0x8000, 0xC000, 0xE000, 0xF000, 0xF800, 0xFC00, 0xFE00, 0xFF00];
-
-    static int AppendBits(Span<byte> output, int ol, uint code, int clen, State state)
+    static void AppendBits<T>(ref T output, uint code, int clen, State state)
+        where T : IUnishoxDataOutput, allows ref struct
     {
         if (state == State.S2)
         {
@@ -151,26 +151,11 @@ public class Unishox
                 clen -= 7;
             }
         }
-        while (clen > 0)
-        {
-            int cur_bit = ol % 8;
-            int blen = (clen > 8 ? 8 : clen);
-            byte a_byte = (byte)((code & Mask[blen - 1]) >> 8);
-            a_byte >>= cur_bit;
-            if (blen + cur_bit > 8)
-                blen = (8 - cur_bit);
-            if (cur_bit == 0)
-                output[ol / 8] = a_byte;
-            else
-                output[ol / 8] |= a_byte;
-            code <<= blen;
-            ol += blen;
-            clen -= blen;
-        }
-        return ol;
+        output.WriteBits((ushort)code, clen);
     }
 
-    static int EncodeCount(Span<byte> output, int ol, int count)
+    static void EncodeCount<T>(ref T output, int count)
+        where T : IUnishoxDataOutput, allows ref struct
     {
         // First five bits are code and Last three bits of codes represent length
         ReadOnlySpan<byte> codes = [0x01, 0x82, 0xC3, 0xE5, 0xED, 0xF5, 0xFD];
@@ -179,76 +164,92 @@ public class Unishox
         int till = 0;
         for (int i = 0; i < 6; i++)
         {
-            till += (1 << bit_len[i]);
+            till += 1 << bit_len[i];
             if (count < till)
             {
-                ol = AppendBits(output, ol, (codes[i] & 0xF8u) << 8, codes[i] & 0x07, State.S1);
-                ol = AppendBits(output, ol, (uint)(count - adder[i]) << (16 - bit_len[i]), bit_len[i], State.S1);
-                return ol;
+                AppendBits(ref output, (codes[i] & 0xF8u) << 8, codes[i] & 0x07, State.S1);
+                AppendBits(ref output, (uint)(count - adder[i]) << (16 - bit_len[i]), bit_len[i], State.S1);
+                return;
             }
         }
-        return ol;
     }
 
     static ReadOnlySpan<byte> UniBitLen => [6, 12, 14, 16, 21];
     static ReadOnlySpan<int> UniAdder => [0, 64, 4160, 20544, 86080];
-    static int EncodeUnicode(Span<byte> output, int ol, int code, int prev_code)
+    static void EncodeUnicode<T>(ref T output, int code, int prev_code)
+        where T : IUnishoxDataOutput, allows ref struct
     {
-        uint spl_code = (code == ',' ? 0xE000u :
-          ((code == '.' || code == 0x3002) ? 0xE800u : (code == ' ' ? 0 :
-          (code == 13 ? 0xF000u : (code == 10 ? 0xF800u : 0xFFFFu)))));
-        if (spl_code != 0xFFFFu)
+        ushort spl_code = code switch
         {
-            int spl_code_len = (code == ',' ? 5 :
-              ((code == '.' || code == 0x3002) ? 5 : (code == ' ' ? 1 :
-              (code == 13 ? 5 : (code == 10 ? 5 : 0xFFFF)))));
-            ol = AppendBits(output, ol, UNI_STATE_SPL_CODE, UNI_STATE_SPL_CODE_LEN, State.UNI);
-            ol = AppendBits(output, ol, spl_code, spl_code_len, State.S1);
-            return ol;
+            ',' => 0xE000,
+            '.' or 0x3002 => 0xE800,
+            ' ' => 0,
+            13 => 0xF000,
+            10 => 0xF800,
+            _ => 0xFFFF
+        };
+        if (spl_code != 0xFFFF)
+        {
+            int spl_code_len = code switch
+            {
+                ',' => 5,
+                '.' or 0x3002 => 5,
+                ' ' => 1,
+                13 => 5,
+                10 => 5,
+                _ => 0xFFFF
+            };
+            AppendBits(ref output, UNI_STATE_SPL_CODE, UNI_STATE_SPL_CODE_LEN, State.UNI);
+            AppendBits(ref output, spl_code, spl_code_len, State.S1);
+            return;
         }
         // First five bits are code and Last three bits of codes represent length
         ReadOnlySpan<byte> codes = [0x01, 0x82, 0xC3, 0xE4, 0xF5, 0xFD];
         int till = 0;
         for (int i = 0; i < 5; i++)
         {
-            till += (1 << UniBitLen[i]);
+            till += 1 << UniBitLen[i];
             int diff = Math.Abs(code - prev_code);
             if (diff < till)
             {
-                ol = AppendBits(output, ol, (codes[i] & 0xF8u) << 8, codes[i] & 0x07, State.S1);
-                ol = AppendBits(output, ol, prev_code > code ? 0x8000u : 0u, 1, State.S1);
+                AppendBits(ref output, (codes[i] & 0xF8u) << 8, codes[i] & 0x07, State.S1);
+                AppendBits(ref output, prev_code > code ? 0x8000u : 0u, 1, State.S1);
                 if (UniBitLen[i] > 16)
                 {
                     int val = diff - UniAdder[i];
                     int excess_bits = UniBitLen[i] - 16;
-                    ol = AppendBits(output, ol, (uint)(val >> excess_bits), 16, State.S1);
-                    ol = AppendBits(output, ol, (uint)(val & ((1 << excess_bits) - 1)) << (16 - excess_bits), excess_bits, State.S1);
+                    AppendBits(ref output, (uint)(val >> excess_bits), 16, State.S1);
+                    AppendBits(ref output, (uint)(val & ((1 << excess_bits) - 1)) << (16 - excess_bits), excess_bits, State.S1);
                 }
                 else
-                    ol = AppendBits(output, ol, (uint)(diff - UniAdder[i]) << (16 - UniBitLen[i]), UniBitLen[i], State.S1);
-                return ol;
+                    AppendBits(ref output, (uint)(diff - UniAdder[i]) << (16 - UniBitLen[i]), UniBitLen[i], State.S1);
+                return;
             }
         }
-        return ol;
     }
 
-    static ReadOnlySpan<int> UTF8_MASK => [0xE0, 0xF0, 0xF8];
-    static ReadOnlySpan<int> UTF8_PREFIX => [0xC0, 0xE0, 0xF0];
-    static int ReadUTF8(ReadOnlySpan<byte> input, int len, int l, out int utf8len)
+    static ReadOnlySpan<int> Utf8Mask => [0xE0, 0xF0, 0xF8];
+    static ReadOnlySpan<int> Utf8Prefix => [0xC0, 0xE0, 0xF0];
+    static int ReadUTF8(ReadOnlySpan<byte> input, int l, out int utf8len)
     {
         int bc = 0;
         int uni = 0;
+        if (l >= input.Length)
+        {
+            utf8len = 0;
+            return 0;
+        }
         byte c_in = input[l];
         for (; bc < 3; bc++)
         {
-            if (UTF8_PREFIX[bc] == (c_in & UTF8_MASK[bc]) && len - (bc + 1) > l)
+            if (Utf8Prefix[bc] == (c_in & Utf8Mask[bc]) && l + bc + 1 < input.Length)
             {
                 int j = 0;
-                uni = c_in & ~UTF8_MASK[bc] & 0xFF;
+                uni = c_in & ~Utf8Mask[bc] & 0xFF;
                 do
                 {
                     uni <<= 6;
-                    uni += (input[l + j + 1] & 0x3F);
+                    uni += input[l + j + 1] & 0x3F;
                 } while (j++ < bc);
                 break;
             }
@@ -262,19 +263,21 @@ public class Unishox
         return 0;
     }
 
-    static int MatchOccurance(ReadOnlySpan<byte> input, int len, int l, Span<byte> output, ref int ol, ref State state, ref bool is_all_upper)
+    static int MatchOccurance<T>(ReadOnlySpan<byte> input, int l, ref T output, ref State state, ref bool is_all_upper)
+        where T : IUnishoxDataOutput, allows ref struct
     {
         int longest_dist = 0;
         int longest_len = 0;
         for (int j = l - NICE_LEN, k; j >= 0; j--)
         {
-            for (k = l; k < len && j + k - l < l; k++)
+            for (k = l; k < input.Length && j + k - l < l; k++)
             {
                 if (input[k] != input[j + k - l])
                     break;
             }
-            while ((input[k] >> 6) == 2)
-                k--; // Skip partial UTF-8 matches
+            if (k < input.Length)
+                while ((input[k] >> 6) == 2)
+                    k--; // Skip partial UTF-8 matches
             if (k - l > NICE_LEN - 1)
             {
                 int match_len = k - l - NICE_LEN;
@@ -292,24 +295,26 @@ public class Unishox
             {
                 is_all_upper = false;
                 state = State.S1;
-                ol = AppendBits(output, ol, BACK2_STATE1_CODE, BACK2_STATE1_CODE_LEN, state);
+                AppendBits(ref output, BACK2_STATE1_CODE, BACK2_STATE1_CODE_LEN, state);
             }
             if (state == State.UNI)
-                ol = AppendBits(output, ol, UNI_STATE_DICT_CODE, UNI_STATE_DICT_CODE_LEN, State.UNI);
+                AppendBits(ref output, UNI_STATE_DICT_CODE, UNI_STATE_DICT_CODE_LEN, State.UNI);
             else
-                ol = AppendBits(output, ol, DICT_CODE, DICT_CODE_LEN, State.S1);
-            ol = EncodeCount(output, ol, longest_len);
-            ol = EncodeCount(output, ol, longest_dist);
-            l += (longest_len + NICE_LEN);
+                AppendBits(ref output, DICT_CODE, DICT_CODE_LEN, State.S1);
+            EncodeCount(ref output, longest_len);
+            EncodeCount(ref output, longest_dist);
+            l += longest_len + NICE_LEN;
             l--;
             return l;
         }
         return -l;
     }
 
-    static int MatchLine(ReadOnlySpan<byte> input, int len, int l, Span<byte> output, ref int ol, UnishoxLinkList? prev_lines, ref State state, ref bool is_all_upper)
+    static int MatchLine<T>(ReadOnlySpan<byte> input, int l, ref T output, UnishoxLinkList? prev_lines, ref State state, ref bool is_all_upper)
+        where T : IUnishoxDataOutput, allows ref struct
     {
-        int last_ol = ol;
+        int last_op = output.Position;
+        int last_ob = output.RemainingBits;
         int last_len = 0;
         int last_dist = 0;
         int line_ctr = 0;
@@ -317,41 +322,42 @@ public class Unishox
         {
             ReadOnlySpan<byte> prev_lines_data = prev_lines.Data.Span;
             int line_len = prev_lines_data.Length;
-            int limit = (line_ctr == 0 ? l : line_len);
+            int limit = line_ctr == 0 ? l : line_len;
             for (int j = 0; j < limit; j++)
             {
                 int i, k;
-                for (i = l, k = j; k < line_len && i < len; k++, i++)
+                for (i = l, k = j; k < line_len && i < input.Length; k++, i++)
                 {
                     if (prev_lines_data[k] != input[i])
                         break;
                 }
-                while ((prev_lines_data[k] >> 6) == 2)
-                    k--; // Skip partial UTF-8 matches
+                if (k < prev_lines_data.Length)
+                    while ((prev_lines_data[k] >> 6) == 2)
+                        k--; // Skip partial UTF-8 matches
                 if ((k - j) >= NICE_LEN)
                 {
                     if (last_len != 0)
                     {
                         if (j > last_dist)
                             continue;
-                        ol = last_ol;
+                        output.SeekBit(last_op, last_ob);
                     }
-                    last_len = (k - j);
+                    last_len = k - j;
                     last_dist = j;
                     int last_ctx = line_ctr;
                     if (state == State.S2 || is_all_upper)
                     {
                         is_all_upper = false;
                         state = State.S1;
-                        ol = AppendBits(output, ol, BACK2_STATE1_CODE, BACK2_STATE1_CODE_LEN, state);
+                        AppendBits(ref output, BACK2_STATE1_CODE, BACK2_STATE1_CODE_LEN, state);
                     }
                     if (state == State.UNI)
-                        ol = AppendBits(output, ol, UNI_STATE_DICT_CODE, UNI_STATE_DICT_CODE_LEN, State.UNI);
+                        AppendBits(ref output, UNI_STATE_DICT_CODE, UNI_STATE_DICT_CODE_LEN, State.UNI);
                     else
-                        ol = AppendBits(output, ol, DICT_CODE, DICT_CODE_LEN, State.S1);
-                    ol = EncodeCount(output, ol, last_len - NICE_LEN);
-                    ol = EncodeCount(output, ol, last_dist);
-                    ol = EncodeCount(output, ol, last_ctx);
+                        AppendBits(ref output, DICT_CODE, DICT_CODE_LEN, State.S1);
+                    EncodeCount(ref output, last_len - NICE_LEN);
+                    EncodeCount(ref output, last_dist);
+                    EncodeCount(ref output, last_ctx);
                     j += last_len;
                 }
             }
@@ -367,11 +373,47 @@ public class Unishox
         return -l;
     }
 
-
-    public static int Compress(ReadOnlySpan<byte> input, Span<byte> output, UnishoxLinkList? prev_lines, bool to_match_repeats = true, bool use_64k_lookup = true)
+    public static int CompressCount(
+        ReadOnlySpan<byte> input,
+        UnishoxLinkList? prev_lines = null,
+        bool to_match_repeats = true,
+        bool use_64k_lookup = true)
+    {
+        DummyOutput o = new();
+        Compress(input, ref o, prev_lines, to_match_repeats, use_64k_lookup);
+        return o.Position;
+    }
+    public static int Compress(
+        ReadOnlySpan<byte> input,
+        Stream output,
+        UnishoxLinkList? prev_lines = null,
+        bool to_match_repeats = true,
+        bool use_64k_lookup = true)
+    {
+        StreamOutput o = new(output);
+        Compress(input, ref o, prev_lines, to_match_repeats, use_64k_lookup);
+        return o.Position;
+    }
+    public static int Compress(
+        ReadOnlySpan<byte> input,
+        Span<byte> output,
+        UnishoxLinkList? prev_lines = null,
+        bool to_match_repeats = true,
+        bool use_64k_lookup = true)
+    {
+        SpanOutput o = new(output);
+        Compress(input, ref o, prev_lines, to_match_repeats, use_64k_lookup);
+        return o.Position;
+    }
+    public static void Compress<T>(
+        ReadOnlySpan<byte> input,
+        ref T output,
+        UnishoxLinkList? prev_lines = null,
+        bool to_match_repeats = true,
+        bool use_64k_lookup = true)
+        where T : IUnishoxDataOutput, allows ref struct
     {
         State state = State.S1;
-        int ol = 0;
         int prev_uni = 0;
         bool is_all_upper = false;
         IMemoryOwner<byte>? mem = null;
@@ -383,35 +425,35 @@ public class Unishox
             lookup.Clear();
         }
         using IMemoryOwner<byte>? memo = mem;
-        for (int l = 0, len = input.Length; l < len; l++)
+        for (int l = 0; l < input.Length; l++)
         {
             byte c_in = input[l];
-            if (state != State.UNI && l != 0 && l < len - 4)
+            if (state != State.UNI && l != 0 && l < input.Length - 4)
             {
                 if (c_in == input[l - 1] && c_in == input[l + 1] && c_in == input[l + 2] && c_in == input[l + 3])
                 {
                     int rpt_count = l + 4;
-                    while (rpt_count < len && input[rpt_count] == c_in)
+                    while (rpt_count < input.Length && input[rpt_count] == c_in)
                         rpt_count++;
                     rpt_count -= l;
                     if (state == State.S2 || is_all_upper)
                     {
                         is_all_upper = false;
                         state = State.S1;
-                        ol = AppendBits(output, ol, BACK2_STATE1_CODE, BACK2_STATE1_CODE_LEN, state);
+                        AppendBits(ref output, BACK2_STATE1_CODE, BACK2_STATE1_CODE_LEN, state);
                     }
-                    ol = AppendBits(output, ol, RPT_CODE, RPT_CODE_LEN, State.S1);
-                    ol = EncodeCount(output, ol, rpt_count - 4);
+                    AppendBits(ref output, RPT_CODE, RPT_CODE_LEN, State.S1);
+                    EncodeCount(ref output, rpt_count - 4);
                     l += rpt_count;
                     l--;
                     continue;
                 }
             }
-            if (to_match_repeats && l < (len - NICE_LEN + 1))
+            if (to_match_repeats && l < (input.Length - NICE_LEN + 1))
             {
                 if (prev_lines is not null)
                 {
-                    l = MatchLine(input, len, l, output, ref ol, prev_lines, ref state, ref is_all_upper);
+                    l = MatchLine(input, l, ref output, prev_lines, ref state, ref is_all_upper);
                     if (l > 0)
                     {
                         continue;
@@ -423,7 +465,7 @@ public class Unishox
                     int to_lookup = c_in ^ input[l + 1] + ((input[l + 2] ^ input[l + 3]) << 8);
                     if (lookup[to_lookup] != 0)
                     {
-                        l = MatchOccurance(input, len, l, output, ref ol, ref state, ref is_all_upper);
+                        l = MatchOccurance(input, l, ref output, ref state, ref is_all_upper);
                         if (l > 0)
                             continue;
                         l = -l;
@@ -433,7 +475,7 @@ public class Unishox
                 }
                 else
                 {
-                    l = MatchOccurance(input, len, l, output, ref ol, ref state, ref is_all_upper);
+                    l = MatchOccurance(input, l, ref output, ref state, ref is_all_upper);
                     if (l > 0)
                         continue;
                     l = -l;
@@ -441,7 +483,7 @@ public class Unishox
             }
             if (state == State.UNI && (c_in is (byte)'.' or (byte)' ' or (byte)',' or 13 or 10))
             {
-                ol = EncodeUnicode(output, ol, c_in, prev_uni);
+                EncodeUnicode(ref output, c_in, prev_uni);
                 continue;
             }
             if (state == State.S2)
@@ -454,12 +496,12 @@ public class Unishox
                 else
                 {
                     state = State.S1;
-                    ol = AppendBits(output, ol, BACK2_STATE1_CODE, BACK2_STATE1_CODE_LEN, state);
+                    AppendBits(ref output, BACK2_STATE1_CODE, BACK2_STATE1_CODE_LEN, state);
                 }
             }
             if (state == State.UNI && c_in is >= 0 and <= 127)
             {
-                ol = AppendBits(output, ol, BACK_FROM_UNI_CODE, BACK_FROM_UNI_CODE_LEN, state);
+                AppendBits(ref output, BACK_FROM_UNI_CODE, BACK_FROM_UNI_CODE_LEN, state);
                 state = State.S1;
             }
             bool is_upper = false;
@@ -470,11 +512,11 @@ public class Unishox
                 if (is_all_upper)
                 {
                     is_all_upper = false;
-                    ol = AppendBits(output, ol, BACK2_STATE1_CODE, BACK2_STATE1_CODE_LEN, state);
+                    AppendBits(ref output, BACK2_STATE1_CODE, BACK2_STATE1_CODE_LEN, state);
                 }
             }
             byte c_next = 0;
-            if (l + 1 < len)
+            if (l + 1 < input.Length)
                 c_next = input[l + 1];
 
             if (c_in is >= 32 and <= 126)
@@ -482,57 +524,57 @@ public class Unishox
                 if (is_upper && !is_all_upper)
                 {
                     int ll;
-                    for (ll = l + 5; ll >= l && ll < len; ll--)
+                    for (ll = l + 5; ll >= l && ll < input.Length; ll--)
                     {
                         if (input[ll] is >= (byte)'A' and <= (byte)'Z')
                             break;
                     }
                     if (ll == l - 1)
                     {
-                        ol = AppendBits(output, ol, ALL_UPPER_CODE, ALL_UPPER_CODE_LEN, state);
+                        AppendBits(ref output, ALL_UPPER_CODE, ALL_UPPER_CODE_LEN, state);
                         is_all_upper = true;
                     }
                 }
                 if (state == State.S1 && c_in is >= (byte)'0' and <= (byte)'9')
                 {
-                    ol = AppendBits(output, ol, SW2_STATE2_CODE, SW2_STATE2_CODE_LEN, state);
+                    AppendBits(ref output, SW2_STATE2_CODE, SW2_STATE2_CODE_LEN, state);
                     state = State.S2;
                 }
                 c_in -= 32;
                 if (is_all_upper && is_upper)
                     c_in += 32;
                 if (c_in == 0 && state == State.S2)
-                    ol = AppendBits(output, ol, ST2_SPC_CODE, ST2_SPC_CODE_LEN, state);
+                    AppendBits(ref output, ST2_SPC_CODE, ST2_SPC_CODE_LEN, state);
                 else
-                    ol = AppendBits(output, ol, C95[c_in], L95[c_in], state);
+                    AppendBits(ref output, C95[c_in], L95[c_in], state);
             }
             else if (c_in == 13 && c_next == 10)
             {
-                ol = AppendBits(output, ol, CRLF_CODE, CRLF_CODE_LEN, state);
+                AppendBits(ref output, CRLF_CODE, CRLF_CODE_LEN, state);
                 l++;
             }
             else if (c_in == 10)
-                ol = AppendBits(output, ol, LF_CODE, LF_CODE_LEN, state);
+                AppendBits(ref output, LF_CODE, LF_CODE_LEN, state);
             else if (c_in == '\t')
-                ol = AppendBits(output, ol, TAB_CODE, TAB_CODE_LEN, state);
+                AppendBits(ref output, TAB_CODE, TAB_CODE_LEN, state);
             else
             {
-                int uni = ReadUTF8(input, len, l, out int utf8len);
+                int uni = ReadUTF8(input, l, out int utf8len);
                 if (uni != 0)
                 {
                     l += utf8len;
                     if (state != State.UNI)
                     {
-                        int uni2 = ReadUTF8(input, len, l + 1, out utf8len);
+                        int uni2 = ReadUTF8(input, l + 1, out utf8len);
                         if (uni2 != 0)
                         {
                             state = State.UNI;
-                            ol = AppendBits(output, ol, CONT_UNI_CODE, CONT_UNI_CODE_LEN, State.S1);
+                            AppendBits(ref output, CONT_UNI_CODE, CONT_UNI_CODE_LEN, State.S1);
                         }
                         else
-                            ol = AppendBits(output, ol, UNI_CODE, UNI_CODE_LEN, State.S1);
+                            AppendBits(ref output, UNI_CODE, UNI_CODE_LEN, State.S1);
                     }
-                    ol = EncodeUnicode(output, ol, uni, prev_uni);
+                    EncodeUnicode(ref output, uni, prev_uni);
                     if (uni != 0x3002)
                         prev_uni = uni;
                 }
@@ -541,19 +583,18 @@ public class Unishox
                     if (state == State.UNI)
                     {
                         state = State.S1;
-                        ol = AppendBits(output, ol, BACK_FROM_UNI_CODE, BACK_FROM_UNI_CODE_LEN, state);
+                        AppendBits(ref output, BACK_FROM_UNI_CODE, BACK_FROM_UNI_CODE_LEN, state);
                     }
-                    ol = AppendBits(output, ol, BIN_CODE, BIN_CODE_LEN, state);
-                    ol = EncodeCount(output, ol, c_in);
+                    AppendBits(ref output, BIN_CODE, BIN_CODE_LEN, state);
+                    EncodeCount(ref output, c_in);
                 }
             }
         }
         if (state == State.UNI)
-            ol = AppendBits(output, ol, BACK_FROM_UNI_CODE, BACK_FROM_UNI_CODE_LEN, state);
-        int bits = ol % 8;
-        if (bits != 0)
-            ol = AppendBits(output, ol, TERM_CODE, 8 - bits, State.S1);
-        return ol / 8 + (ol % 8 != 0 ? 1 : 0);
+            AppendBits(ref output, BACK_FROM_UNI_CODE, BACK_FROM_UNI_CODE_LEN, state);
+        if (output.RemainingBits > 0)
+            AppendBits(ref output, TERM_CODE, 8 - output.RemainingBits, State.S1);
+        output.FlushBits();
     }
 
 
@@ -581,12 +622,12 @@ public class Unishox
                                         0,  0,  0,  0,  0,  0,  0,  5 + (6 << 3)];
     //                                  24, 25, 26, 27, 28, 29, 30, 31
 
-    static int GetBitVal(ReadOnlySpan<byte> input, int bit_no, int count)
+    static int GetBitVal(ReadOnlySpan<byte> input, long bit_no, int count)
     {
-        return (input[bit_no >> 3] & (0x80 >> (bit_no % 8))) != 0 ? 1 << count : 0;
+        return (input[(int)(bit_no >> 3)] & (0x80 >> ((int)bit_no % 8))) != 0 ? 1 << count : 0;
     }
 
-    static int GetCodeIdx(ReadOnlySpan<byte> code_type, ReadOnlySpan<byte> input, int len, ref int bit_no_p)
+    static int GetCodeIdx(ReadOnlySpan<byte> code_type, ReadOnlySpan<byte> input, long len, ref long bit_no_p)
     {
         int code = 0;
         int count = 0;
@@ -604,7 +645,7 @@ public class Unishox
         return 1; // skip if code not found
     }
 
-    static int GetNumFromBits(ReadOnlySpan<byte> input, int bit_no, int count)
+    static int GetNumFromBits(ReadOnlySpan<byte> input, long bit_no, int count)
     {
         int ret = 0;
         while (count-- != 0)
@@ -615,7 +656,7 @@ public class Unishox
         return ret;
     }
 
-    static int ReadCount(ReadOnlySpan<byte> input, ref int bit_no_p, int len)
+    static int ReadCount(ReadOnlySpan<byte> input, ref long bit_no_p, long len)
     {
         ReadOnlySpan<byte> bit_len = [5, 2, 7, 9, 12, 16, 17];
         ReadOnlySpan<ushort> adder = [4, 0, 36, 164, 676, 4772, 0];
@@ -627,17 +668,17 @@ public class Unishox
         return count;
     }
 
-    static int ReadUnicode(ReadOnlySpan<byte> input, ref int bit_no_p, int len)
+    static int ReadUnicode(ReadOnlySpan<byte> input, ref long bit_no_p, long len)
     {
         int code = 0;
         for (int i = 0; i < 5; i++)
         {
             code += GetBitVal(input, bit_no_p, i);
             bit_no_p++;
-            int idx = (code == 0 && i == 0 ? 0 : (code == 1 && i == 1 ? 1 :
+            int idx = code == 0 && i == 0 ? 0 : (code == 1 && i == 1 ? 1 :
                         (code == 3 && i == 2 ? 2 : (code == 7 && i == 3 ? 3 :
                         (code == 15 && i == 4 ? 4 :
-                        (code == 31 && i == 4 ? 5 : -1))))));
+                        (code == 31 && i == 4 ? 5 : -1)))));
             if (idx == 5)
                 return 0x7FFFFF00 + GetCodeIdx(HCode, input, len, ref bit_no_p);
             if (idx >= 0)
@@ -653,29 +694,31 @@ public class Unishox
         return 0;
     }
 
-    static void WriteUTF8(Span<byte> output, ref int ol, int uni)
+    static void WriteUTF8<T>(ref T output, int uni)
+        where T : IUnishoxTextOutput, allows ref struct
     {
         if (uni < (1 << 11))
         {
-            output[ol++] = (byte)(0xC0 + (uni >> 6));
-            output[ol++] = (byte)(0x80 + (uni & 63));
+            output.WriteByte((byte)(0xC0 | (uni >> 6)));
+            output.WriteByte((byte)(0x80 | (uni & 63)));
         }
         else if (uni < (1 << 16))
         {
-            output[ol++] = (byte)(0xE0 + (uni >> 12));
-            output[ol++] = (byte)(0x80 + ((uni >> 6) & 63));
-            output[ol++] = (byte)(0x80 + (uni & 63));
+            output.WriteByte((byte)(0xE0 | (uni >> 12)));
+            output.WriteByte((byte)(0x80 | ((uni >> 6) & 63)));
+            output.WriteByte((byte)(0x80 | (uni & 63)));
         }
         else
         {
-            output[ol++] = (byte)(0xF0 + (uni >> 18));
-            output[ol++] = (byte)(0x80 + ((uni >> 12) & 63));
-            output[ol++] = (byte)(0x80 + ((uni >> 6) & 63));
-            output[ol++] = (byte)(0x80 + (uni & 63));
+            output.WriteByte((byte)(0xF0 | (uni >> 18)));
+            output.WriteByte((byte)(0x80 | ((uni >> 12) & 63)));
+            output.WriteByte((byte)(0x80 | ((uni >> 6) & 63)));
+            output.WriteByte((byte)(0x80 | (uni & 63)));
         }
     }
 
-    static int DecodeRepeat(ReadOnlySpan<byte> input, int len, Span<byte> output, int ol, ref int bit_no, UnishoxLinkList? prev_lines)
+    static void DecodeRepeat<T>(ReadOnlySpan<byte> input, long len, ref T output, ref long bit_no, UnishoxLinkList? prev_lines)
+        where T : IUnishoxTextOutput, allows ref struct
     {
         if (prev_lines is not null)
         {
@@ -685,35 +728,48 @@ public class Unishox
             UnishoxLinkList cur_line = prev_lines;
             while (ctx-- != 0)
                 cur_line = cur_line.Previous ?? throw new ArgumentException("prev_lines are not suitable for decompressing this data!", nameof(prev_lines));
-            cur_line.Data.Span.Slice(dist, dict_len).CopyTo(output[ol..]);
-            ol += dict_len;
+            output.Write(cur_line.Data.Span.Slice(dist, dict_len));
         }
         else
         {
             int dict_len = ReadCount(input, ref bit_no, len) + NICE_LEN;
             int dist = ReadCount(input, ref bit_no, len) + NICE_LEN - 1;
-            output.Slice(ol - dist, dict_len).CopyTo(output[ol..]);
-            ol += dict_len;
+            output.CopyFrom(dist, dict_len);
         }
-        return ol;
     }
 
-    public static int Decompress(ReadOnlySpan<byte> input, Span<byte> output, UnishoxLinkList? prev_lines)
+    public static int DecompressCount(ReadOnlySpan<byte> input, UnishoxLinkList? prev_lines = null)
+    {
+        DummyOutput o = new();
+        Decompress(input, ref o, prev_lines);
+        return o.Position;
+    }
+    public static int Decompress(ReadOnlySpan<byte> input, Stream output, UnishoxLinkList? prev_lines = null)
+    {
+        StreamOutput o = new(output);
+        Decompress(input, ref o, prev_lines);
+        return o.Position;
+    }
+    public static int Decompress(ReadOnlySpan<byte> input, Span<byte> output, UnishoxLinkList? prev_lines = null)
+    {
+        SpanOutput o = new(output);
+        Decompress(input, ref o, prev_lines);
+        return o.Position;
+    }
+    public static void Decompress<T>(ReadOnlySpan<byte> input, ref T output, UnishoxLinkList? prev_lines = null)
+        where T : IUnishoxTextOutput, allows ref struct
     {
         Set dstate = Set.S1;
-        int bit_no = 0;
+        long bit_no = 0;
         bool is_all_upper = false;
-        int ol = 0;
         int prev_uni = 0;
-
-        int len = input.Length << 3;
-        output[ol] = 0;
+        long len = (long)input.Length << 3;
         while (bit_no < len)
         {
             int h, v;
             byte c = 0;
             bool is_upper = is_all_upper;
-            int orig_bit_no = bit_no;
+            long orig_bit_no = bit_no;
             v = GetCodeIdx(VCode, input, len, ref bit_no);
             if (v == 199)
             {
@@ -785,9 +841,9 @@ public class Unishox
             if (v == 0 && h == (int)Set.S1A)
             {
                 if (is_upper)
-                    output[ol++] = (byte)ReadCount(input, ref bit_no, len);
+                    output.WriteByte((byte)ReadCount(input, ref bit_no, len));
                 else
-                    ol = DecodeRepeat(input, len, output, ol, ref bit_no, prev_lines);
+                    DecodeRepeat(input, len, ref output, ref bit_no, prev_lines);
                 continue;
             }
             if (h == (int)Set.S1 && v == 3)
@@ -803,39 +859,39 @@ public class Unishox
                         switch (spl_code_idx)
                         {
                             case 1:
-                                output[ol++] = (byte)' ';
+                                output.WriteByte((byte)' ');
                                 break;
                             case 0:
-                                ol = DecodeRepeat(input, len, output, ol, ref bit_no, prev_lines);
+                                DecodeRepeat(input, len, ref output, ref bit_no, prev_lines);
                                 break;
                             case 3:
-                                output[ol++] = (byte)',';
+                                output.WriteByte((byte)',');
                                 break;
                             case 4:
                                 if (prev_uni > 0x3000)
-                                    WriteUTF8(output, ref ol, 0x3002);
+                                    WriteUTF8(ref output, 0x3002);
                                 else
-                                    output[ol++] = (byte)'.';
+                                    output.WriteByte((byte)'.');
                                 break;
                             case 5:
-                                output[ol++] = 13;
+                                output.WriteByte(13);
                                 break;
                             case 6:
-                                output[ol++] = 10;
+                                output.WriteByte(10);
                                 break;
                         }
                     }
                     else
                     {
                         prev_uni += delta;
-                        WriteUTF8(output, ref ol, prev_uni);
+                        WriteUTF8(ref output, prev_uni);
                     }
                 } while (is_upper);
                 continue;
             }
             if (h < 64 && v < 32)
                 c = Sets[h * 11 + v];
-            if (c >= 'a' && c <= 'z')
+            if (c is >= (byte)'a' and <= (byte)'z')
             {
                 if (is_upper)
                     c -= 32;
@@ -849,21 +905,19 @@ public class Unishox
                     switch (v)
                     {
                         case 9:
-                            output[ol++] = (byte)'\r';
-                            output[ol++] = (byte)'\n';
+                            output.WriteByte((byte)'\r');
+                            output.WriteByte((byte)'\n');
                             continue;
                         case 8:
                             if (is_upper)
                             {   // rpt
                                 int count = ReadCount(input, ref bit_no, len);
                                 count += 4;
-                                byte rpt_c = output[ol - 1];
-                                while (count-- != 0)
-                                    output[ol++] = rpt_c;
+                                output.RepeatLast(count);
                             }
                             else
                             {
-                                output[ol++] = (byte)'\n';
+                                output.WriteByte((byte)'\n');
                             }
                             continue;
                         case 10:
@@ -871,8 +925,7 @@ public class Unishox
                     }
                 }
             }
-            output[ol++] = c;
+            output.WriteByte(c);
         }
-        return ol;
     }
 }
