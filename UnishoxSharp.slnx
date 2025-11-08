@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/UnishoxSharp.csproj" />
+  <Project Path="test/Test.csproj" Id="ad7fbcab-e146-45c3-920c-d11470a2b1ba" />
+</Solution>
