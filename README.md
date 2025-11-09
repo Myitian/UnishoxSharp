@@ -2,7 +2,7 @@
 
 C# port of Unishox, work in progress.
 
-Currently, only Unishox 1 is available, and its API style is close to that of the original C library.
+Currently, only Unishox 1 is available. Port of Unishox 2 is under development.
 
 Original Unishox: https://github.com/siara-cc/Unishox2
 
