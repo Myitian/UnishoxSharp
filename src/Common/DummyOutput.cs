@@ -1,5 +1,8 @@
+using System.Runtime.InteropServices;
+
 namespace UnishoxSharp.Common;
 
+[StructLayout(LayoutKind.Auto)]
 internal struct DummyOutput() : IUnishoxTextOutput, IUnishoxDataOutput
 {
     public readonly bool LastBit => false;

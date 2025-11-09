@@ -147,7 +147,7 @@ partial class Unishox
     /// <summary>
     /// Reads UTF-8 character from input. Also returns the number of bytes occupied by the UTF-8 character in utf8len
     /// </summary>
-    static int ReadUTF8(ReadOnlySpan<byte> input, int l, out int utf8len)
+    static int ReadUTF8(scoped ReadOnlySpan<byte> input, int l, out int utf8len)
     {
         int ret = 0;
         if (l < (input.Length - 1)
@@ -211,7 +211,7 @@ partial class Unishox
     /// <param name="state"></param>
     /// <param name="preset"></param>
     /// <returns></returns>
-    static int MatchOccurance<T, TPreset>(ReadOnlySpan<byte> input, int l, ref T output, ref SetAndState state, in TPreset preset)
+    static int MatchOccurance<T, TPreset>(scoped ReadOnlySpan<byte> input, int l, ref T output, ref SetAndState state, in TPreset preset)
         where T : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
@@ -259,7 +259,7 @@ partial class Unishox
     /// This is also used for Unicode strings<br />
     /// This is a crude implementation that is not optimized. Assuming only short strings are encoded, this is not much of an issue.
     /// </summary>
-    static int MatchLine<T, TPreset>(ReadOnlySpan<byte> input, int l, ref T output, UnishoxLinkList? prev_lines, ref SetAndState state, in TPreset preset)
+    static int MatchLine<T, TPreset>(scoped ReadOnlySpan<byte> input, int l, ref T output, UnishoxLinkList? prev_lines, ref SetAndState state, in TPreset preset)
         where T : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
@@ -499,7 +499,7 @@ partial class Unishox
         Compress(input, ref o, in preset, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
         return o.Position;
     }
-    public static void Compress<T, TPreset>(ReadOnlySpan<byte> input, ref T output, in TPreset preset, UnishoxLinkList? prev_lines = null, bool need_full_term_codes = false, byte magic_bits = 0xFF, int magic_bit_len = 1)
+    public static void Compress<T, TPreset>(scoped ReadOnlySpan<byte> input, ref T output, in TPreset preset, UnishoxLinkList? prev_lines = null, bool need_full_term_codes = false, byte magic_bits = 0xFF, int magic_bit_len = 1)
          where T : IUnishoxDataOutput, allows ref struct
          where TPreset : IUnishoxPreset, allows ref struct
     {

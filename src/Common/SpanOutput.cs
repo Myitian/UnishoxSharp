@@ -1,9 +1,12 @@
+using System.Runtime.InteropServices;
+
 namespace UnishoxSharp.Common;
 
 /// <remarks>
 /// mixing calling to methods from <see cref="IUnishoxDataOutput"/> and <see cref="IUnishoxTextOutput"/> is undefined behavior!
 /// </remarks>
-internal ref struct SpanOutput(Span<byte> span) : IUnishoxTextOutput, IUnishoxDataOutput
+[StructLayout(LayoutKind.Auto)]
+public ref struct SpanOutput(Span<byte> span) : IUnishoxTextOutput, IUnishoxDataOutput
 {
     public Span<byte> BaseSpan { get; } = span;
     public readonly bool LastBit => RemainingBits == 0 ?

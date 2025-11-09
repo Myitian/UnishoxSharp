@@ -1,6 +1,7 @@
 using System.Text;
 using UnishoxSharp.Common;
-using UnishoxSharp.V2;
+using UnishoxV1 = UnishoxSharp.V1.Unishox;
+using UnishoxV2 = UnishoxSharp.V2.Unishox;
 
 namespace Test;
 
@@ -10,38 +11,70 @@ class Program
     {
         if (!Check())
             return 1;
-
+        using MemoryStream bk = new();
+        using StreamNoSeek ns = new(bk);
         Console.WriteLine("TEST PASSED!");
         UnishoxLinkList? linkList = null;
         while (Console.ReadLine() is string line)
         {
-            byte[] chars = Encoding.UTF8.GetBytes(line);
+            byte[] src = Encoding.UTF8.GetBytes(line);
+
             msTest.SetLength(0);
-            int lenC = Unishox.CompressCount(chars, linkList);
-            int len = Unishox.Compress(chars, msTest, linkList);
-            byte[] data = msTest.ToArray();
+            int lenV1cC = UnishoxV1.CompressCount(src, linkList);
+            int lenV1c = UnishoxV1.Compress(src, msTest, linkList);
+            byte[] dataV1c = msTest.ToArray();
             msTest.SetLength(0);
-            int len2C = Unishox.DecompressCount(data, linkList);
-            int len2 = Unishox.Decompress(data, msTest, linkList);
-            byte[] data2 = msTest.ToArray();
+            int lenV1Ld = UnishoxV1.LegacyDecompress(dataV1c, msTest, linkList);
+            byte[] dataV1Ld = msTest.ToArray();
             msTest.SetLength(0);
-            int lenXC = Unishox.CompressCount(chars, linkList, true);
-            int lenX = Unishox.Compress(chars, msTest, linkList, true);
-            byte[] dataX = [.. msTest.ToArray(), 0, 0, 0, 0, 0, 0, 0];
+            bk.SetLength(0);
+            bk.Write(dataV1c);
+            bk.Position = 0;
+            int lenV1dC = UnishoxV1.DecompressCount(ns, linkList);
+            bk.Position = 0;
+            int lenV1d = UnishoxV1.Decompress(ns, msTest, linkList);
+            byte[] dataV1d = msTest.ToArray();
+            bool statusV1 = src.AsSpan().SequenceEqual(dataV1d);
+
             msTest.SetLength(0);
-            int len3C = Unishox.DecompressCount(dataX, linkList);
-            int len3 = Unishox.Decompress(dataX, msTest, linkList);
-            byte[] data3 = msTest.ToArray();
-            bool status = chars.AsSpan().SequenceEqual(data2);
-            Console.WriteLine(BytesToString(chars));
-            Console.WriteLine(BytesToString(data));
-            Console.WriteLine(BytesToString(data2));
-            Console.WriteLine(BytesToString(dataX));
-            Console.WriteLine(BytesToString(data3));
-            Console.WriteLine($"L1:{lenC}/{len}, L2:{len2C}/{len2}, LX:{lenXC}/{lenX}, L3:{len3C}/{len3}, EQ:{status}");
+            int lenV2cC = UnishoxV2.CompressCount(src, linkList);
+            int lenV2c = UnishoxV2.Compress(src, msTest, linkList);
+            byte[] dataV2c = msTest.ToArray();
+            msTest.SetLength(0);
+            bk.SetLength(0);
+            bk.Write(dataV2c);
+            bk.Position = 0;
+            int lenV2dC = UnishoxV2.DecompressCount(ns, linkList);
+            bk.Position = 0;
+            int lenV2d = UnishoxV2.Decompress(ns, msTest, linkList);
+            byte[] dataV2d = msTest.ToArray();
+            bool statusV2 = src.AsSpan().SequenceEqual(dataV2d);
+
+            msTest.SetLength(0);
+            int lenV2TcC = UnishoxV2.CompressCount(src, linkList, true);
+            int lenV2Tc = UnishoxV2.Compress(src, msTest, linkList, true);
+            byte[] dataV2Tc = msTest.ToArray();
+            msTest.SetLength(0);
+            int lenV2TdC = UnishoxV2.DecompressCount(dataV2c, linkList);
+            int lenV2Td = UnishoxV2.Decompress(dataV2c, msTest, linkList);
+            byte[] dataV2Td = msTest.ToArray();
+            bool statusV2T = src.AsSpan().SequenceEqual(dataV2Td);
+
+            Console.WriteLine($"src :{BytesToString(src)}");
+            Console.WriteLine($"srcs:{src.Length}");
+            Console.WriteLine($"V1c :{BytesToString(dataV1c)}");
+            Console.WriteLine($"V1d :{BytesToString(dataV1d)}");
+            Console.WriteLine($"V1d :{BytesToString(dataV1Ld)}");
+            Console.WriteLine($"V1s :{lenV1cC}/{lenV1c} {lenV1dC}/{lenV1d} {statusV1}");
+            Console.WriteLine($"V2c :{BytesToString(dataV2c)}");
+            Console.WriteLine($"V2d :{BytesToString(dataV2d)}");
+            Console.WriteLine($"V2s :{lenV2cC}/{lenV2c} {lenV2dC}/{lenV2d} {statusV2}");
+            Console.WriteLine($"V2Tc:{BytesToString(dataV2Tc)}");
+            Console.WriteLine($"V2Td:{BytesToString(dataV2Td)}");
+            Console.WriteLine($"V2Ts:{lenV2TcC}/{lenV2Tc} {lenV2TdC}/{lenV2Td} {statusV2T}");
             linkList = new()
             {
-                Data = chars,
+                Data = src,
                 Previous = linkList
             };
         }
@@ -49,14 +82,23 @@ class Program
     }
 
     static readonly MemoryStream msTest = new();
-    static bool DoTest(ReadOnlySpan<byte> chars)
+    static bool DoTest(scoped ReadOnlySpan<byte> chars)
     {
         msTest.SetLength(0);
-        int len = Unishox.Compress(chars, msTest, null);
+        int len = UnishoxV2.Compress(chars, msTest, null);
         byte[] data = msTest.ToArray();
+
         msTest.SetLength(0);
-        int len2 = Unishox.Decompress(data, msTest, null);
+        //Console.WriteLine($"*LD");
+        int len3 = UnishoxV2.LegacyDecompress(data, msTest, null);
+        byte[] data3 = msTest.ToArray();
+
+        msTest.SetLength(0);
+        //Console.WriteLine($"*ND");
+        int len2 = UnishoxV2.Decompress(data, msTest, null);
         byte[] data2 = msTest.ToArray();
+
+        msTest.SetLength(0);
         bool status = chars.SequenceEqual(data2);
         if (!status)
         {
@@ -65,10 +107,12 @@ class Program
             Console.WriteLine(BytesToString(data.AsSpan(0, len)));
             Console.WriteLine(BytesToString(data2));
             Console.WriteLine(BytesToString(data2.AsSpan(0, len2)));
+            Console.WriteLine(BytesToString(data3));
+            Console.WriteLine(BytesToString(data3.AsSpan(0, len3)));
         }
         return status;
     }
-    static StringBuilder BytesToString(ReadOnlySpan<byte> bytes, int limit = int.MaxValue, StringBuilder? sb = null)
+    static StringBuilder BytesToString(scoped ReadOnlySpan<byte> bytes, int limit = int.MaxValue, StringBuilder? sb = null)
     {
         sb ??= new();
         sb.Append("b\"");
@@ -300,5 +344,34 @@ class Program
         // Emoji
         if (!DoTest("🤣🤣🤣🤣🤣🤣🤣🤣🤣🤣🤣"u8)) return false;
         return true;
+    }
+}
+
+class StreamNoSeek(Stream stream) : Stream
+{
+    public override bool CanRead => stream.CanRead;
+    public override bool CanSeek => false;
+    public override bool CanWrite => stream.CanWrite;
+    public override long Length => throw new Exception();
+    public override long Position { get => stream.Position; set => throw new Exception(); }
+    public override void Flush()
+    {
+        stream.Flush();
+    }
+    public override int Read(byte[] buffer, int offset, int count)
+    {
+        return stream.Read(buffer, offset, count);
+    }
+    public override long Seek(long offset, SeekOrigin origin)
+    {
+        throw new Exception();
+    }
+    public override void SetLength(long value)
+    {
+        throw new Exception();
+    }
+    public override void Write(byte[] buffer, int offset, int count)
+    {
+        stream.Write(buffer, offset, count);
     }
 }

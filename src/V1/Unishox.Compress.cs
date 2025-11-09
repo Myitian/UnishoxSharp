@@ -96,7 +96,7 @@ partial class Unishox
 
     static ReadOnlySpan<int> Utf8Mask => [0xE0, 0xF0, 0xF8];
     static ReadOnlySpan<int> Utf8Prefix => [0xC0, 0xE0, 0xF0];
-    static int ReadUTF8(ReadOnlySpan<byte> input, int l, out int utf8len)
+    static int ReadUTF8(scoped ReadOnlySpan<byte> input, int l, out int utf8len)
     {
         int bc = 0;
         int uni = 0;
@@ -129,7 +129,7 @@ partial class Unishox
         return 0;
     }
 
-    static int MatchOccurance<T>(ReadOnlySpan<byte> input, int l, ref T output, ref State state, ref bool is_all_upper)
+    static int MatchOccurance<T>(scoped ReadOnlySpan<byte> input, int l, ref T output, ref State state, ref bool is_all_upper)
         where T : IUnishoxDataOutput, allows ref struct
     {
         int longest_dist = 0;
@@ -176,7 +176,7 @@ partial class Unishox
         return -l;
     }
 
-    static int MatchLine<T>(ReadOnlySpan<byte> input, int l, ref T output, UnishoxLinkList? prev_lines, ref State state, ref bool is_all_upper)
+    static int MatchLine<T>(scoped ReadOnlySpan<byte> input, int l, ref T output, UnishoxLinkList? prev_lines, ref State state, ref bool is_all_upper)
         where T : IUnishoxDataOutput, allows ref struct
     {
         int last_op = output.Position;

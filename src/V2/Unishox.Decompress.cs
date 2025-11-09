@@ -1,7 +1,5 @@
-using System;
-using System.Collections.Generic;
+using System.Diagnostics;
 using UnishoxSharp.Common;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace UnishoxSharp.V2;
 
@@ -10,25 +8,19 @@ partial class Unishox
     /// <summary>
     /// Reads one bit from in
     /// </summary>
-    static int ReadBit(ReadOnlySpan<byte> input, long bit_no)
+    static int ReadBit<TIn>(ref TIn input, bool autoForward = false)
+        where TIn : IUnishoxDataInput, allows ref struct
     {
-        return input[(int)(bit_no >> 3)] & (0x80 >> (int)(bit_no % 8));
+        return input.ReadBit(autoForward);
     }
 
     /// <summary>
     /// Reads next 8 bits, if available
     /// </summary>
-    static byte Read8bitCode(ReadOnlySpan<byte> input, long bit_no)
+    static byte Read8BitCode<TIn>(ref TIn input, int offset = 0)
+        where TIn : IUnishoxDataInput, allows ref struct
     {
-        int bit_pos = (int)(bit_no & 0x07);
-        int char_pos = (int)(bit_no >> 3);
-        byte code = (byte)(input[char_pos] << bit_pos);
-        char_pos++;
-        if (char_pos < input.Length)
-            code |= (byte)(input[char_pos] >> (8 - bit_pos));
-        else
-            code |= (byte)(0xFF >> (8 - bit_pos));
-        return code;
+        return (byte)input.Read8Bit(false, offset);
     }
 
     /// <summary>
@@ -36,7 +28,7 @@ partial class Unishox
     /// </summary>
     const int SECTION_COUNT = 5;
     /// <summary>
-    /// Used by <see cref="ReadVCodeIdx" /> for finding the section under which the code read using <see cref="Read8bitCode" /> falls
+    /// Used by <see cref="ReadVCodeIdx" /> for finding the section under which the code read using <see cref="Read8BitCode" /> falls
     /// </summary>
     static ReadOnlySpan<byte> VSections => [0x7F, 0xBF, 0xDF, 0xEF, 0xFF];
     /// <summary>
@@ -44,11 +36,11 @@ partial class Unishox
     /// </summary>
     static ReadOnlySpan<byte> VSectionPos => [0, 4, 8, 12, 20];
     /// <summary>
-    /// Used by <see cref="ReadVCodeIdx" /> for masking the code read by <see cref="Read8bitCode" />
+    /// Used by <see cref="ReadVCodeIdx" /> for masking the code read by <see cref="Read8BitCode" />
     /// </summary>
     static ReadOnlySpan<byte> VSectionMask => [0x7F, 0x3F, 0x1F, 0x0F, 0x0F];
     /// <summary>
-    /// Used by <see cref="ReadVCodeIdx" /> for shifting the code read by <see cref="Read8bitCode" /> to obtain the vpos
+    /// Used by <see cref="ReadVCodeIdx" /> for shifting the code read by <see cref="Read8BitCode" /> to obtain the vpos
     /// </summary>
     static ReadOnlySpan<byte> VSectionShift => [5, 4, 3, 1, 0];
 
@@ -72,25 +64,25 @@ partial class Unishox
     /// <summary>
     /// Decodes the vertical code from the given bitstream at in<br />
     /// This is designed to use less memory using a 36 uint8_t buffer
-    /// compared to using a 256 uint8_t buffer to decode the next 8 bits read by <see cref="Read8bitCode" /> by splitting the list of vertical codes.<br />
+    /// compared to using a 256 uint8_t buffer to decode the next 8 bits read by <see cref="Read8BitCode" /> by splitting the list of vertical codes.<br />
     /// Decoder is designed for using less memory, not speed.<br />
     /// Returns the veritical code index or 99 if match could not be found.<br />
     /// Also updates bit_no_p with how many ever bits used by the vertical code.
     /// </summary>
-    static int ReadVCodeIdx(ReadOnlySpan<byte> input, ref long bit_no_p)
+    static int ReadVCodeIdx<TIn>(ref TIn input)
+        where TIn : IUnishoxDataInput, allows ref struct
     {
-        long len = (long)input.Length << 3;
-        if (bit_no_p < len)
+        if (input.CanRead())
         {
-            byte code = Read8bitCode(input, bit_no_p);
+            byte code = Read8BitCode(ref input);
             int i = 0;
             do
             {
                 if (code <= VSections[i])
                 {
                     byte vcode = VCodeLookup[VSectionPos[i] + ((code & VSectionMask[i]) >> VSectionShift[i])];
-                    bit_no_p += (vcode >> 5) + 1;
-                    if (bit_no_p > len)
+                    input.Skip((vcode >> 5) + 1);
+                    if (!input.CanRead(0))
                         return 99;
                     return vcode & 0x1F;
                 }
@@ -109,20 +101,20 @@ partial class Unishox
     /// Returns the horizontal code index or 99 if match could not be found.<br />
     /// Also updates bit_no_p with how many ever bits used by the horizontal code.
     /// </summary>
-    static int ReadHCodeIdx<TPreset>(ReadOnlySpan<byte> input, ref long bit_no_p, in TPreset preset)
-     where TPreset : IUnishoxPreset, allows ref struct
+    static int ReadHCodeIdx<TIn, TPreset>(ref TIn input, in TPreset preset)
+        where TIn : IUnishoxDataInput, allows ref struct
+        where TPreset : IUnishoxPreset, allows ref struct
     {
         if (preset.HCodeLensSpan[(int)SetAndState.Alpha] == 0)
             return (int)SetAndState.Alpha;
-        long len = (long)input.Length << 3;
-        if (bit_no_p < len)
+        if (input.CanRead())
         {
-            byte code = Read8bitCode(input, bit_no_p);
+            byte code = Read8BitCode(ref input);
             for (int code_pos = 0; code_pos < 5; code_pos++)
             {
                 if (preset.HCodeLensSpan[code_pos] != 0 && (code & LenMasks[preset.HCodeLensSpan[code_pos] - 1]) == preset.HCodesSpan[code_pos])
                 {
-                    bit_no_p += preset.HCodeLensSpan[code_pos];
+                    input.Skip(preset.HCodeLensSpan[code_pos]);
                     return code_pos;
                 }
             }
@@ -134,34 +126,31 @@ partial class Unishox
     /// Returns the position of step code (0, 10, 110, etc.) encountered in the stream
     /// </summary>
     /// <returns></returns>
-    static int GetStepCodeIdx(ReadOnlySpan<byte> input, ref long bit_no_p, int limit)
+    static int GetStepCodeIdx<TIn>(ref TIn input, int limit)
+        where TIn : IUnishoxDataInput, allows ref struct
     {
-        long len = (long)input.Length << 3;
         int idx = 0;
-        while (bit_no_p < len && ReadBit(input, bit_no_p) != 0)
+        while (input.CanRead() && ReadBit(ref input, true) != 0)
         {
             idx++;
-            bit_no_p++;
             if (idx == limit)
                 return idx;
         }
-        if (bit_no_p >= len)
+        if (!input.CanRead())
             return 99;
-        bit_no_p++;
         return idx;
     }
 
     /// <summary>
     /// Reads specified number of bits and builds the corresponding integer
     /// </summary>
-    static int GetNumFromBits(ReadOnlySpan<byte> input, long bit_no, int count)
+    static int GetNumFromBits<TIn>(ref TIn input, int count)
+        where TIn : IUnishoxDataInput, allows ref struct
     {
-        long len = (long)input.Length << 3;
         int ret = 0;
-        while (count-- > 0 && bit_no < len)
+        while (count-- > 0 && input.CanRead())
         {
-            ret += ReadBit(input, bit_no) != 0 ? 1 << count : 0;
-            bit_no++;
+            ret += ReadBit(ref input, true) != 0 ? 1 << count : 0;
         }
         return count < 0 ? ret : -1;
     }
@@ -169,16 +158,15 @@ partial class Unishox
     /// <summary>
     /// Decodes the count from the given bit stream at in. Also updates bit_no_p
     /// </summary>
-    static int ReadCount(ReadOnlySpan<byte> input, ref long bit_no_p)
+    static int ReadCount<TIn>(ref TIn input)
+        where TIn : IUnishoxDataInput, allows ref struct
     {
-        long len = (long)input.Length << 3;
-        int idx = GetStepCodeIdx(input, ref bit_no_p, 4);
+        int idx = GetStepCodeIdx(ref input, 4);
         if (idx == 99)
             return -1;
-        if (bit_no_p + CountBitLens[idx] - 1 >= len)
+        if (!input.CanRead(CountBitLens[idx]))
             return -1;
-        int count = GetNumFromBits(input, bit_no_p, CountBitLens[idx]) + (idx != 0 ? CountAdder[idx - 1] : 0);
-        bit_no_p += CountBitLens[idx];
+        int count = GetNumFromBits(ref input, CountBitLens[idx]) + (idx != 0 ? CountAdder[idx - 1] : 0);
         return count;
     }
 
@@ -186,26 +174,24 @@ partial class Unishox
     /// Decodes the Unicode codepoint from the given bit stream at in. Also updates bit_no_p<br />
     /// When the step code is 5, reads the next step code to find out the special code.
     /// </summary>
-    static int ReadUnicode(ReadOnlySpan<byte> input, ref long bit_no_p)
+    static int ReadUnicode<TIn>(ref TIn input)
+        where TIn : IUnishoxDataInput, allows ref struct
     {
-        long len = (long)input.Length << 3;
-        int idx = GetStepCodeIdx(input, ref bit_no_p, 5);
+        int idx = GetStepCodeIdx(ref input, 5);
         if (idx == 99)
             return 0x7FFFFF00 + 99;
         if (idx == 5)
         {
-            idx = GetStepCodeIdx(input, ref bit_no_p, 4);
+            idx = GetStepCodeIdx(ref input, 4);
             return 0x7FFFFF00 + idx;
         }
         if (idx >= 0)
         {
-            bool sign = bit_no_p < len && ReadBit(input, bit_no_p) != 0;
-            bit_no_p++;
-            if (bit_no_p + UniBitLen[idx] - 1 >= len)
+            bool sign = input.CanRead() && ReadBit(ref input, true) != 0;
+            if (!input.CanRead(UniBitLen[idx]))
                 return 0x7FFFFF00 + 99;
-            int count = GetNumFromBits(input, bit_no_p, UniBitLen[idx]);
+            int count = GetNumFromBits(ref input, UniBitLen[idx]);
             count += UniAdder[idx];
-            bit_no_p += UniBitLen[idx];
             return sign ? -count : count;
         }
         return 0;
@@ -214,8 +200,8 @@ partial class Unishox
     /// <summary>
     /// Write given unicode code point to out as a UTF-8 sequence
     /// </summary>
-    static void WriteUTF8<T>(ref T output, int uni)
-        where T : IUnishoxTextOutput, allows ref struct
+    static void WriteUTF8<TOut>(ref TOut output, int uni)
+        where TOut : IUnishoxTextOutput, allows ref struct
     {
         if (uni < (1 << 11))
         {
@@ -240,18 +226,19 @@ partial class Unishox
     /// <summary>
     /// Decode repeating sequence and appends to out
     /// </summary>
-    static bool DecodeRepeat<T>(ReadOnlySpan<byte> input, ref T output, ref long bit_no, UnishoxLinkList? prev_lines)
-        where T : IUnishoxTextOutput, allows ref struct
+    static bool DecodeRepeat<TIn, TOut>(ref TIn input, ref TOut output, UnishoxLinkList? prev_lines)
+        where TIn : IUnishoxDataInput, allows ref struct
+        where TOut : IUnishoxTextOutput, allows ref struct
     {
         if (prev_lines is not null)
         {
-            int dict_len = ReadCount(input, ref bit_no) + NICE_LEN;
+            int dict_len = ReadCount(ref input) + NICE_LEN;
             if (dict_len < NICE_LEN)
                 return false;
-            int dist = ReadCount(input, ref bit_no);
+            int dist = ReadCount(ref input);
             if (dist < 0)
                 return false;
-            int ctx = ReadCount(input, ref bit_no);
+            int ctx = ReadCount(ref input);
             if (ctx < 0)
                 return false;
             UnishoxLinkList? cur_line = prev_lines;
@@ -265,13 +252,13 @@ partial class Unishox
         }
         else
         {
-            int dict_len = ReadCount(input, ref bit_no) + NICE_LEN;
+            int dict_len = ReadCount(ref input) + NICE_LEN;
             if (dict_len < NICE_LEN)
                 return false;
-            int dist = ReadCount(input, ref bit_no) + NICE_LEN - 1;
+            int dist = ReadCount(ref input) + NICE_LEN - 1;
             if (dist < NICE_LEN - 1)
                 return false;
-            output.CopyFrom(dist, dict_len);
+            output.CopyFrom(-dist, dict_len);
         }
         return true;
     }
@@ -288,60 +275,98 @@ partial class Unishox
         return (byte)('A' + nibble - 10);
     }
 
-    public static int DecompressCount(ReadOnlySpan<byte> input, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+    public static int DecompressCount(Stream input, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
     {
         return DecompressCount(input, UnishoxPresets.Default, prev_lines, magic_bit_len);
     }
-    public static int DecompressCount<TPreset>(ReadOnlySpan<byte> input, in TPreset preset, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+    public static int DecompressCount<TPreset>(Stream input, in TPreset preset, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
         where TPreset : IUnishoxPreset, allows ref struct
     {
+        StreamInput i = new(input);
         DummyOutput o = new();
-        Decompress(input, ref o, in preset, prev_lines, magic_bit_len);
+        Decompress(ref i, ref o, in preset, prev_lines, magic_bit_len);
         return o.Position;
     }
-    public static int Decompress(ReadOnlySpan<byte> input, Stream output, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+    public static int Decompress(Stream input, Stream output, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
     {
         return Decompress(input, output, UnishoxPresets.Default, prev_lines, magic_bit_len);
     }
-    public static int Decompress<TPreset>(ReadOnlySpan<byte> input, Stream output, in TPreset preset, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+    public static int Decompress<TPreset>(Stream input, Stream output, in TPreset preset, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
         where TPreset : IUnishoxPreset, allows ref struct
     {
+        StreamInput i = new(input);
         StreamOutput o = new(output);
-        Decompress(input, ref o, in preset, prev_lines, magic_bit_len);
+        Decompress(ref i, ref o, in preset, prev_lines, magic_bit_len);
         return o.Position;
     }
-    public static int Decompress(ReadOnlySpan<byte> input, Span<byte> output, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+    public static int Decompress(Stream input, scoped Span<byte> output, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
     {
         return Decompress(input, output, UnishoxPresets.Default, prev_lines, magic_bit_len);
     }
-    public static int Decompress<TPreset>(ReadOnlySpan<byte> input, Span<byte> output, in TPreset preset, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+    public static int Decompress<TPreset>(Stream input, scoped Span<byte> output, in TPreset preset, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
         where TPreset : IUnishoxPreset, allows ref struct
     {
+        StreamInput i = new(input);
         SpanOutput o = new(output);
-        Decompress(input, ref o, in preset, prev_lines, magic_bit_len);
+        Decompress(ref i, ref o, in preset, prev_lines, magic_bit_len);
         return o.Position;
     }
-    public static void Decompress<T, TPreset>(ReadOnlySpan<byte> input, ref T output, in TPreset preset, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
-          where T : IUnishoxTextOutput, allows ref struct
-          where TPreset : IUnishoxPreset, allows ref struct
+    public static int DecompressCount(scoped ReadOnlySpan<byte> input, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+    {
+        return DecompressCount(input, UnishoxPresets.Default, prev_lines, magic_bit_len);
+    }
+    public static int DecompressCount<TPreset>(scoped ReadOnlySpan<byte> input, in TPreset preset, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+        where TPreset : IUnishoxPreset, allows ref struct
+    {
+        SpanInput i = new(input);
+        DummyOutput o = new();
+        Decompress(ref i, ref o, in preset, prev_lines, magic_bit_len);
+        return o.Position;
+    }
+    public static int Decompress(scoped ReadOnlySpan<byte> input, Stream output, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+    {
+        return Decompress(input, output, UnishoxPresets.Default, prev_lines, magic_bit_len);
+    }
+    public static int Decompress<TPreset>(scoped ReadOnlySpan<byte> input, Stream output, in TPreset preset, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+        where TPreset : IUnishoxPreset, allows ref struct
+    {
+        SpanInput i = new(input);
+        StreamOutput o = new(output);
+        Decompress(ref i, ref o, in preset, prev_lines, magic_bit_len);
+        return o.Position;
+    }
+    public static int Decompress(scoped ReadOnlySpan<byte> input, scoped Span<byte> output, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+    {
+        return Decompress(input, output, UnishoxPresets.Default, prev_lines, magic_bit_len);
+    }
+    public static int Decompress<TPreset>(scoped ReadOnlySpan<byte> input, scoped Span<byte> output, in TPreset preset, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+        where TPreset : IUnishoxPreset, allows ref struct
+    {
+        SpanInput i = new(input);
+        SpanOutput o = new(output);
+        Decompress(ref i, ref o, in preset, prev_lines, magic_bit_len);
+        return o.Position;
+    }
+    public static void Decompress<TIn, TOut, TPreset>(ref TIn input, ref TOut output, in TPreset preset, UnishoxLinkList? prev_lines = null, int magic_bit_len = 1)
+        where TIn : IUnishoxDataInput, allows ref struct
+        where TOut : IUnishoxTextOutput, allows ref struct
+        where TPreset : IUnishoxPreset, allows ref struct
     {
         ArgumentOutOfRangeException.ThrowIfNegative(magic_bit_len);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(magic_bit_len, 8);
         SetAndState dstate = SetAndState.Alpha;
-        long bit_no = magic_bit_len; // ignore the magic bit
+        input.Skip(magic_bit_len); // ignore the magic bit
         int h = (int)SetAndState.Alpha, v;
         bool is_all_upper = false;
         int prev_uni = 0;
 
-        long len = (long)input.Length << 3;
-        while (bit_no < len)
+        while (input.CanRead())
         {
-            long orig_bit_no = bit_no;
             if (dstate == SetAndState.Delta || h == (int)SetAndState.Delta)
             {
                 if (dstate != SetAndState.Delta)
                     h = (int)dstate;
-                int delta = ReadUnicode(input, ref bit_no);
+                int delta = ReadUnicode(ref input);
                 if ((delta >> 8) == 0x7FFFFF)
                 {
                     int spl_code_idx = delta & 0x000000FF;
@@ -353,12 +378,9 @@ partial class Unishox
                             output.WriteByte((byte)' ');
                             continue;
                         case 1:
-                            h = ReadHCodeIdx(input, ref bit_no, in preset);
+                            h = ReadHCodeIdx(ref input, in preset);
                             if (h == 99)
-                            {
-                                bit_no = len;
-                                continue;
-                            }
+                                goto FAILED;
                             if (h is (int)SetAndState.Delta or (int)SetAndState.Alpha)
                             {
                                 dstate = (SetAndState)h;
@@ -366,7 +388,7 @@ partial class Unishox
                             }
                             if (h == (int)SetAndState.Dict)
                             {
-                                bool rpt_ret = DecodeRepeat(input, ref output, ref bit_no, prev_lines);
+                                bool rpt_ret = DecodeRepeat(ref input, ref output, prev_lines);
                                 if (!rpt_ret)
                                     return; // if we break here it will only break out of switch
                                 h = (int)dstate;
@@ -396,50 +418,38 @@ partial class Unishox
                 h = (int)dstate;
             byte c = 0;
             bool is_upper = is_all_upper;
-            v = ReadVCodeIdx(input, ref bit_no);
+            v = ReadVCodeIdx(ref input);
             if (v == 99 || h == 99)
-            {
-                bit_no = orig_bit_no;
                 break;
-            }
             if (v == 0 && h != (int)SetAndState.Sym)
             {
-                if (bit_no >= len)
+                if (!input.CanRead())
                     break;
                 if (h != (int)SetAndState.Num || dstate != SetAndState.Delta)
                 {
-                    h = ReadHCodeIdx(input, ref bit_no, in preset);
-                    if (h == 99 || bit_no >= len)
-                    {
-                        bit_no = orig_bit_no;
+                    h = ReadHCodeIdx(ref input, in preset);
+                    if (h == 99 || !input.CanRead())
                         break;
-                    }
                 }
                 if (h == (int)SetAndState.Alpha)
                 {
                     if (dstate == SetAndState.Alpha)
                     {
-                        if (preset.HCodeLensSpan[(int)SetAndState.Alpha] == 0 && TERM_BYTE_PRESET_1 == (Read8bitCode(input, bit_no - SW_CODE_LEN) & (0xFF << (8 - (is_all_upper ? TERM_BYTE_PRESET_1_LEN_UPPER : TERM_BYTE_PRESET_1_LEN_LOWER)))))
+                        if (preset.HCodeLensSpan[(int)SetAndState.Alpha] == 0 && TERM_BYTE_PRESET_1 == (Read8BitCode(ref input, -SW_CODE_LEN) & (0xFF << (8 - (is_all_upper ? TERM_BYTE_PRESET_1_LEN_UPPER : TERM_BYTE_PRESET_1_LEN_LOWER)))))
                             break; // Terminator for preset 1
                         if (is_all_upper)
                         {
                             is_all_upper = false;
                             continue;
                         }
-                        v = ReadVCodeIdx(input, ref bit_no);
+                        v = ReadVCodeIdx(ref input);
                         if (v == 99)
-                        {
-                            bit_no = orig_bit_no;
                             break;
-                        }
                         if (v == 0)
                         {
-                            h = ReadHCodeIdx(input, ref bit_no, in preset);
+                            h = ReadHCodeIdx(ref input, in preset);
                             if (h == 99)
-                            {
-                                bit_no = orig_bit_no;
                                 break;
-                            }
                             if (h == (int)SetAndState.Alpha)
                             {
                                 is_all_upper = true;
@@ -456,7 +466,7 @@ partial class Unishox
                 }
                 else if (h == (int)SetAndState.Dict)
                 {
-                    bool rpt_ret = DecodeRepeat(input, ref output, ref bit_no, prev_lines);
+                    bool rpt_ret = DecodeRepeat(ref input, ref output, prev_lines);
                     if (!rpt_ret)
                         break;
                     continue;
@@ -466,23 +476,20 @@ partial class Unishox
                 else
                 {
                     if (h != (int)SetAndState.Num || dstate != SetAndState.Delta)
-                        v = ReadVCodeIdx(input, ref bit_no);
+                        v = ReadVCodeIdx(ref input);
                     if (v == 99)
-                    {
-                        bit_no = orig_bit_no;
                         break;
-                    }
                     if (h == (int)SetAndState.Num && v == 0)
                     {
-                        int idx = GetStepCodeIdx(input, ref bit_no, 5);
+                        int idx = GetStepCodeIdx(ref input, 5);
                         if (idx == 99)
                             break;
                         if (idx == 0)
                         {
-                            idx = GetStepCodeIdx(input, ref bit_no, 4);
+                            idx = GetStepCodeIdx(ref input, 4);
                             if (idx >= 5)
                                 break;
-                            int rem = ReadCount(input, ref bit_no);
+                            int rem = ReadCount(ref input);
                             if (rem < 0)
                                 break;
                             if (!preset.HasTemplates)
@@ -505,7 +512,7 @@ partial class Unishox
                                         (byte)'t' => 2,
                                         _ => 1
                                     };
-                                    int raw_char = GetNumFromBits(input, bit_no, nibble_len);
+                                    int raw_char = GetNumFromBits(ref input, nibble_len);
                                     if (raw_char < 0)
                                     {
                                         eof = true;
@@ -513,7 +520,6 @@ partial class Unishox
                                     }
                                     output.WriteByte(GetHexChar((byte)raw_char,
                                         c_t == 'f' ? NibbleType.HexLower : NibbleType.HexUpper));
-                                    bit_no += nibble_len;
                                 }
                                 else
                                     output.WriteByte(c_t);
@@ -522,18 +528,17 @@ partial class Unishox
                         }
                         else if (idx == 5)
                         {
-                            int bin_count = ReadCount(input, ref bit_no);
+                            int bin_count = ReadCount(ref input);
                             if (bin_count < 0)
                                 break;
                             if (bin_count == 0) // invalid encoding
                                 break;
                             do
                             {
-                                int raw_char = GetNumFromBits(input, bit_no, 8);
+                                int raw_char = GetNumFromBits(ref input, 8);
                                 if (raw_char < 0)
                                     break;
                                 output.WriteByte((byte)raw_char);
-                                bit_no += 8;
                             } while (--bin_count != 0);
                             if (bin_count > 0) break; // reach input eof
                         }
@@ -544,7 +549,7 @@ partial class Unishox
                                 nibble_count = 32;
                             else
                             {
-                                nibble_count = ReadCount(input, ref bit_no);
+                                nibble_count = ReadCount(ref input);
                                 if (nibble_count < 0)
                                     break;
                                 if (nibble_count == 0) // invalid encoding
@@ -552,13 +557,12 @@ partial class Unishox
                             }
                             do
                             {
-                                int nibble = GetNumFromBits(input, bit_no, 4);
+                                int nibble = GetNumFromBits(ref input, 4);
                                 if (nibble < 0)
                                     break;
                                 output.WriteByte(GetHexChar(nibble, idx < 3 ? NibbleType.HexLower : NibbleType.HexUpper));
                                 if ((idx is 2 or 4) && (nibble_count is 25 or 21 or 17 or 13))
                                     output.WriteByte((byte)'-');
-                                bit_no += 4;
                             } while (--nibble_count != 0);
                             if (nibble_count > 0) break; // reach input eof
                         }
@@ -595,7 +599,7 @@ partial class Unishox
                     }
                     else if (h == (int)SetAndState.Num && v == 26)
                     {
-                        int count = ReadCount(input, ref bit_no);
+                        int count = ReadCount(ref input);
                         if (count < 0)
                             break;
                         count += 4;
@@ -624,5 +628,6 @@ partial class Unishox
                 h = (int)SetAndState.Delta;
             output.WriteByte(c);
         }
+    FAILED:;
     }
 }

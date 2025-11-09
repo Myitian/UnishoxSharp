@@ -1,13 +1,15 @@
 using System.Buffers;
+using System.Runtime.InteropServices;
 
 namespace UnishoxSharp.Common;
 
 /// <remarks>
 /// mixing calling to methods from <see cref="IUnishoxDataOutput"/> and <see cref="IUnishoxTextOutput"/> is undefined behavior!
 /// </remarks>
-internal struct StreamOutput(Stream stream)
-    : IUnishoxTextOutput, IUnishoxDataOutput
+[StructLayout(LayoutKind.Auto)]
+public struct StreamOutput(Stream stream) : IUnishoxTextOutput, IUnishoxDataOutput
 {
+
     private byte last = 0, bits = 0;
     public readonly Stream BaseStream { get; } = stream;
     public readonly bool LastBit => RemainingBits == 0 ?
@@ -30,9 +32,9 @@ internal struct StreamOutput(Stream stream)
     {
         using IMemoryOwner<byte> mem = MemoryPool<byte>.Shared.Rent(count);
         Span<byte> buffer = mem.Memory.Span[..count];
-        BaseStream.Seek(-offset, SeekOrigin.Current);
+        BaseStream.Seek(offset, SeekOrigin.Current);
         BaseStream.ReadExactly(buffer);
-        BaseStream.Seek(offset - count, SeekOrigin.Current);
+        BaseStream.Seek(-(offset + count), SeekOrigin.Current);
         Write(buffer);
     }
     public void WriteByte(byte value)
