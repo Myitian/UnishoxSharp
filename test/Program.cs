@@ -1,8 +1,10 @@
 using System.Text;
 using UnishoxSharp.Common;
-using UnishoxSharp.V1;
+using UnishoxSharp.V2;
 
-internal class Program
+namespace Test;
+
+class Program
 {
     private static int Main()
     {
@@ -22,11 +24,21 @@ internal class Program
             int len2C = Unishox.DecompressCount(data, linkList);
             int len2 = Unishox.Decompress(data, msTest, linkList);
             byte[] data2 = msTest.ToArray();
+            msTest.SetLength(0);
+            int lenXC = Unishox.CompressCount(chars, linkList, true);
+            int lenX = Unishox.Compress(chars, msTest, linkList, true);
+            byte[] dataX = [.. msTest.ToArray(), 0, 0, 0, 0, 0, 0, 0];
+            msTest.SetLength(0);
+            int len3C = Unishox.DecompressCount(dataX, linkList);
+            int len3 = Unishox.Decompress(dataX, msTest, linkList);
+            byte[] data3 = msTest.ToArray();
             bool status = chars.AsSpan().SequenceEqual(data2);
             Console.WriteLine(BytesToString(chars));
             Console.WriteLine(BytesToString(data));
             Console.WriteLine(BytesToString(data2));
-            Console.WriteLine($"L1:{lenC}/{len}, L2:{len2C}/{len2}, EQ:{status}");
+            Console.WriteLine(BytesToString(dataX));
+            Console.WriteLine(BytesToString(data3));
+            Console.WriteLine($"L1:{lenC}/{len}, L2:{len2C}/{len2}, LX:{lenXC}/{lenX}, L3:{len3C}/{len3}, EQ:{status}");
             linkList = new()
             {
                 Data = chars,

@@ -2,7 +2,7 @@ using UnishoxSharp.Common;
 
 namespace UnishoxSharp.V1;
 
-public partial class Unishox
+partial class Unishox
 {
     // Decoder is designed for using less memory, not speed
     // Decode lookup table for code index and length

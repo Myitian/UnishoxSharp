@@ -2,7 +2,7 @@ using UnishoxSharp.Common;
 
 namespace UnishoxSharp.V2;
 
-internal partial class Unishox
+public partial class Unishox
 {
     /// <summary>
     /// possible horizontal sets and states
@@ -34,7 +34,7 @@ internal partial class Unishox
     /// This 2D array has the characters for the sets <see cref="SetAndState.Alpha" />, <see cref="SetAndState.Sym" /> and <see cref="SetAndState.Num" />.
     /// Where a character cannot fit into a <see cref="byte" />, 0 is used and handled in code.
     /// </summary>
-    static ReadOnlySpan<byte> usx_sets => [
+    static ReadOnlySpan<byte> Sets => [
         0,         (byte)' ', (byte)'e', (byte)'t', (byte)'a', (byte)'o', (byte)'i', (byte)'n',
         (byte)'s', (byte)'r', (byte)'l', (byte)'c', (byte)'d', (byte)'h', (byte)'u', (byte)'p', (byte)'m', (byte)'b',
         (byte)'g', (byte)'w', (byte)'f', (byte)'y', (byte)'v', (byte)'k', (byte)'q', (byte)'j', (byte)'x', (byte)'z',
@@ -55,12 +55,12 @@ internal partial class Unishox
     /// First 3 bits - position in usx_hcodes<br />
     /// Next  5 bits - position in usx_vcodes
     /// </remarks>
-    static Array94<byte> usx_code_94 = new();
+    static Array94<byte> Code94 = new();
 
     /// <summary>
     /// Vertical codes starting from the MSB
     /// </summary>
-    static ReadOnlySpan<byte> usx_vcodes => [
+    static ReadOnlySpan<byte> VCodes => [
         0x00, 0x40, 0x60, 0x80, 0x90, 0xA0, 0xB0,
         0xC0, 0xD0, 0xD8, 0xE0, 0xE4, 0xE8, 0xEC,
         0xEE, 0xF0, 0xF2, 0xF4, 0xF6, 0xF7, 0xF8,
@@ -69,7 +69,7 @@ internal partial class Unishox
     /// <summary>
     /// Length of each veritical code
     /// </summary>
-    static ReadOnlySpan<byte> usx_vcode_lens => [
+    static ReadOnlySpan<byte> VCodeLens => [
         2,    3,    3,    4,    4,    4,    4,
         4,    5,    5,    6,    6,    6,    7,
         7,    7,    7,    7,    8,    8,    8,
@@ -79,7 +79,7 @@ internal partial class Unishox
     /// Vertical Codes and Set number for frequent sequences in sets <see cref="SetAndState.Sym" /> and <see cref="SetAndState.Num" />.
     /// First 3 bits indicate set (<see cref="SetAndState.Sym" />/<see cref="SetAndState.Num" />) and rest are vcode positions
     /// </summary>
-    static ReadOnlySpan<byte> usx_freq_codes => [(1 << 5) + 25, (1 << 5) + 26, (1 << 5) + 27, (2 << 5) + 23, (2 << 5) + 24, (2 << 5) + 25];
+    static ReadOnlySpan<byte> FreqCodes => [(1 << 5) + 25, (1 << 5) + 26, (1 << 5) + 27, (2 << 5) + 23, (2 << 5) + 24, (2 << 5) + 25];
 
     /// <summary>
     /// Minimum length to consider as repeating sequence
@@ -154,19 +154,19 @@ internal partial class Unishox
     const int TERM_BYTE_PRESET_1_LEN_UPPER = 4;
 
     /// <summary>
-    /// Offset at which <see cref="usx_code_94" /> starts
+    /// Offset at which <see cref="Code94" /> starts
     /// </summary>
     const int USX_OFFSET_94 = 33;
 
     static Unishox()
     {
-        Span<byte> usx_code_94 = Unishox.usx_code_94;
+        Span<byte> usx_code_94 = Code94;
         usx_code_94.Clear();
         for (int i = 0; i < 3; i++)
         {
             for (int j = 0; j < SetsDim1Length; j++)
             {
-                byte c = usx_sets[i * SetsDim1Length + j];
+                byte c = Sets[i * SetsDim1Length + j];
                 if (c > 32)
                 {
                     usx_code_94[c - USX_OFFSET_94] = (byte)((i << 5) + j);

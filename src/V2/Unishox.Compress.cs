@@ -2,36 +2,36 @@ using UnishoxSharp.Common;
 
 namespace UnishoxSharp.V2;
 
-internal partial class Unishox
+partial class Unishox
 {
     /// <summary>
     /// Appends specified number of bits to the output (out)
     /// </summary>
-    static void append_bits<T>(ref T output, byte code, int clen)
+    static void AppendBits<T>(ref T output, byte code, int clen)
         where T : IUnishoxDataOutput, allows ref struct
     {
-        output.WriteBits(code, clen);
+        output.WriteBits((ushort)(code << 8), clen);
     }
 
     /// <summary>
     /// Appends switch code to out depending on the state (<see cref="SetAndState.Delta" /> or other)
     /// </summary>
-    static void append_switch_code<T>(ref T output, SetAndState state)
+    static void AppendSwitchCode<T>(ref T output, SetAndState state)
         where T : IUnishoxDataOutput, allows ref struct
     {
         if (state == SetAndState.Delta)
         {
-            append_bits(ref output, UNI_STATE_SPL_CODE, UNI_STATE_SPL_CODE_LEN);
-            append_bits(ref output, UNI_STATE_SW_CODE, UNI_STATE_SW_CODE_LEN);
+            AppendBits(ref output, UNI_STATE_SPL_CODE, UNI_STATE_SPL_CODE_LEN);
+            AppendBits(ref output, UNI_STATE_SW_CODE, UNI_STATE_SW_CODE_LEN);
         }
         else
-            append_bits(ref output, SW_CODE, SW_CODE_LEN);
+            AppendBits(ref output, SW_CODE, SW_CODE_LEN);
     }
 
     /// <summary>
     /// Appends given horizontal and veritical code bits to out
     /// </summary>
-    static void append_code<T, TPreset>(ref T output, byte code, ref SetAndState state, in TPreset preset)
+    static void AppendCode<T, TPreset>(ref T output, byte code, ref SetAndState state, in TPreset preset)
         where T : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
@@ -42,69 +42,69 @@ internal partial class Unishox
         switch (hcode)
         {
             case (int)SetAndState.Alpha when state != SetAndState.Alpha:
-                append_switch_code(ref output, state);
-                append_bits(ref output, preset.HCodesSpan[hcode], preset.HCodeLensSpan[hcode]);
+                AppendSwitchCode(ref output, state);
+                AppendBits(ref output, preset.HCodesSpan[hcode], preset.HCodeLensSpan[hcode]);
                 state = SetAndState.Alpha;
                 break;
             case (int)SetAndState.Sym:
-                append_switch_code(ref output, state);
-                append_bits(ref output, preset.HCodesSpan[hcode], preset.HCodeLensSpan[hcode]);
+                AppendSwitchCode(ref output, state);
+                AppendBits(ref output, preset.HCodesSpan[hcode], preset.HCodeLensSpan[hcode]);
                 break;
             case (int)SetAndState.Num when state != SetAndState.Num:
-                append_switch_code(ref output, state);
-                append_bits(ref output, preset.HCodesSpan[hcode], preset.HCodeLensSpan[hcode]);
-                if (usx_sets[hcode * SetsDim1Length + vcode] is >= (byte)'0' and <= (byte)'9')
+                AppendSwitchCode(ref output, state);
+                AppendBits(ref output, preset.HCodesSpan[hcode], preset.HCodeLensSpan[hcode]);
+                if (Sets[hcode * SetsDim1Length + vcode] is >= (byte)'0' and <= (byte)'9')
                     state = SetAndState.Num;
                 break;
         }
-        append_bits(ref output, usx_vcodes[vcode], usx_vcode_lens[vcode]);
+        AppendBits(ref output, VCodes[vcode], VCodeLens[vcode]);
     }
 
 
     /// <summary>
     /// Length of bits used to represent count for each level
     /// </summary>
-    static ReadOnlySpan<int> count_bit_lens => [2, 4, 7, 11, 16];
+    static ReadOnlySpan<int> CountBitLens => [2, 4, 7, 11, 16];
     /// <summary>
     /// Cumulative counts represented at each level
     /// </summary>
-    static ReadOnlySpan<int> count_adder => [4, 20, 148, 2196, 67732];
+    static ReadOnlySpan<int> CountAdder => [4, 20, 148, 2196, 67732];
     /// <summary>
     /// Codes used to specify the level that the count belongs to
     /// </summary>
-    static ReadOnlySpan<byte> count_codes => [0x01, 0x82, 0xC3, 0xE4, 0xF4];
+    static ReadOnlySpan<byte> CountCodes => [0x01, 0x82, 0xC3, 0xE4, 0xF4];
     /// <summary>
     /// Encodes given count to out
     /// </summary>
-    static void encodeCount<T>(ref T output, int count)
+    static void EncodeCount<T>(ref T output, int count)
         where T : IUnishoxDataOutput, allows ref struct
     {
         // First five bits are code and Last three bits of codes represent length
         for (int i = 0; i < 5; i++)
         {
-            if (count < count_adder[i])
+            if (count < CountAdder[i])
             {
-                append_bits(ref output, (byte)(count_codes[i] & 0xF8), count_codes[i] & 0x07);
-                int count16 = (count - (i != 0 ? count_adder[i - 1] : 0)) << (16 - count_bit_lens[i]);
-                if (count_bit_lens[i] > 8)
+                AppendBits(ref output, (byte)(CountCodes[i] & 0xF8), CountCodes[i] & 0x07);
+                int count16 = (count - (i != 0 ? CountAdder[i - 1] : 0)) << (16 - CountBitLens[i]);
+                if (CountBitLens[i] > 8)
                 {
-                    append_bits(ref output, (byte)(count16 >> 8), 8);
-                    append_bits(ref output, (byte)count16, count_bit_lens[i] - 8);
+                    AppendBits(ref output, (byte)(count16 >> 8), 8);
+                    AppendBits(ref output, (byte)count16, CountBitLens[i] - 8);
                 }
                 else
-                    append_bits(ref output, (byte)(count16 >> 8), count_bit_lens[i]);
+                    AppendBits(ref output, (byte)(count16 >> 8), CountBitLens[i]);
                 return;
             }
         }
     }
 
     /// Length of bits used to represent delta code for each level
-    static ReadOnlySpan<byte> uni_bit_len => [6, 12, 14, 16, 21];
+    static ReadOnlySpan<byte> UniBitLen => [6, 12, 14, 16, 21];
     /// Cumulative delta codes represented at each level
-    static ReadOnlySpan<int> uni_adder => [0, 64, 4160, 20544, 86080];
+    static ReadOnlySpan<int> UniAdder => [0, 64, 4160, 20544, 86080];
 
     /// Encodes the unicode code point given by code to out. prev_code is used to calculate the delta
-    static void encodeUnicode<T>(ref T output, int code, int prev_code)
+    static void EncodeUnicode<T>(ref T output, int code, int prev_code)
         where T : IUnishoxDataOutput, allows ref struct
     {
         // First five bits are code and Last three bits of codes represent length
@@ -115,29 +115,29 @@ internal partial class Unishox
             diff = -diff;
         for (int i = 0; i < 5; i++)
         {
-            till += 1 << uni_bit_len[i];
+            till += 1 << UniBitLen[i];
             if (diff < till)
             {
-                append_bits(ref output, (byte)(codes[i] & 0xF8), codes[i] & 0x07);
-                append_bits(ref output, prev_code > code ? (byte)0x80 : (byte)0, 1);
-                int val = diff - uni_adder[i];
-                if (uni_bit_len[i] > 16)
+                AppendBits(ref output, (byte)(codes[i] & 0xF8), codes[i] & 0x07);
+                AppendBits(ref output, prev_code > code ? (byte)0x80 : (byte)0, 1);
+                int val = diff - UniAdder[i];
+                if (UniBitLen[i] > 16)
                 {
-                    val <<= 24 - uni_bit_len[i];
-                    append_bits(ref output, (byte)(val >> 16), 8);
-                    append_bits(ref output, (byte)(val >> 8), 8);
-                    append_bits(ref output, (byte)val, uni_bit_len[i] - 16);
+                    val <<= 24 - UniBitLen[i];
+                    AppendBits(ref output, (byte)(val >> 16), 8);
+                    AppendBits(ref output, (byte)(val >> 8), 8);
+                    AppendBits(ref output, (byte)val, UniBitLen[i] - 16);
                 }
-                else if (uni_bit_len[i] > 8)
+                else if (UniBitLen[i] > 8)
                 {
-                    val <<= 16 - uni_bit_len[i];
-                    append_bits(ref output, (byte)(val >> 8), 8);
-                    append_bits(ref output, (byte)val, uni_bit_len[i] - 8);
+                    val <<= 16 - UniBitLen[i];
+                    AppendBits(ref output, (byte)(val >> 8), 8);
+                    AppendBits(ref output, (byte)val, UniBitLen[i] - 8);
                 }
                 else
                 {
-                    val <<= 8 - uni_bit_len[i];
-                    append_bits(ref output, (byte)val, uni_bit_len[i]);
+                    val <<= 8 - UniBitLen[i];
+                    AppendBits(ref output, (byte)val, UniBitLen[i]);
                 }
                 return;
             }
@@ -147,7 +147,7 @@ internal partial class Unishox
     /// <summary>
     /// Reads UTF-8 character from input. Also returns the number of bytes occupied by the UTF-8 character in utf8len
     /// </summary>
-    static int readUTF8(ReadOnlySpan<byte> input, int l, out int utf8len)
+    static int ReadUTF8(ReadOnlySpan<byte> input, int l, out int utf8len)
     {
         int ret = 0;
         if (l < (input.Length - 1)
@@ -211,7 +211,7 @@ internal partial class Unishox
     /// <param name="state"></param>
     /// <param name="preset"></param>
     /// <returns></returns>
-    static int matchOccurance<T, TPreset>(ReadOnlySpan<byte> input, int l, ref T output, ref SetAndState state, in TPreset preset)
+    static int MatchOccurance<T, TPreset>(ReadOnlySpan<byte> input, int l, ref T output, ref SetAndState state, in TPreset preset)
         where T : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
@@ -241,10 +241,10 @@ internal partial class Unishox
         }
         if (longest_len != 0)
         {
-            append_switch_code(ref output, state);
-            append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Dict], preset.HCodeLensSpan[(int)SetAndState.Dict]);
-            encodeCount(ref output, longest_len);
-            encodeCount(ref output, longest_dist);
+            AppendSwitchCode(ref output, state);
+            AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Dict], preset.HCodeLensSpan[(int)SetAndState.Dict]);
+            EncodeCount(ref output, longest_len);
+            EncodeCount(ref output, longest_dist);
             l += longest_len + NICE_LEN;
             l--;
             return l;
@@ -259,7 +259,7 @@ internal partial class Unishox
     /// This is also used for Unicode strings<br />
     /// This is a crude implementation that is not optimized. Assuming only short strings are encoded, this is not much of an issue.
     /// </summary>
-    static int matchLine<T, TPreset>(ReadOnlySpan<byte> input, int l, ref T output, UnishoxLinkList? prev_lines, ref SetAndState state, in TPreset preset)
+    static int MatchLine<T, TPreset>(ReadOnlySpan<byte> input, int l, ref T output, UnishoxLinkList? prev_lines, ref SetAndState state, in TPreset preset)
         where T : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
@@ -296,11 +296,11 @@ internal partial class Unishox
                     last_len = k - j;
                     last_dist = j;
                     int last_ctx = line_ctr;
-                    append_switch_code(ref output, state);
-                    append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Dict], preset.HCodeLensSpan[(int)SetAndState.Dict]);
-                    encodeCount(ref output, last_len - NICE_LEN);
-                    encodeCount(ref output, last_dist);
-                    encodeCount(ref output, last_ctx);
+                    AppendSwitchCode(ref output, state);
+                    AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Dict], preset.HCodeLensSpan[(int)SetAndState.Dict]);
+                    EncodeCount(ref output, last_len - NICE_LEN);
+                    EncodeCount(ref output, last_dist);
+                    EncodeCount(ref output, last_ctx);
                     j += last_len;
                 }
             }
@@ -319,7 +319,7 @@ internal partial class Unishox
     /// <summary>
     /// Returns 4 bit code assuming ch falls between '0' to '9', 'A' to 'F' or 'a' to 'f'
     /// </summary>
-    byte getBaseCode(byte ch)
+    static byte GetBaseCode(byte ch)
     {
         return ch switch
         {
@@ -333,7 +333,7 @@ internal partial class Unishox
     /// <summary>
     /// Gets 4 bit code assuming ch falls between '0' to '9', 'A' to 'F' or 'a' to 'f'
     /// </summary>
-    NibbleType getNibbleType(byte ch)
+    static NibbleType GetNibbleType(byte ch)
     {
         return ch switch
         {
@@ -347,19 +347,19 @@ internal partial class Unishox
     /// <summary>
     /// Starts coding of nibble sets
     /// </summary>
-    static void append_nibble_escape<T, TPreset>(ref T output, SetAndState state, in TPreset preset)
+    static void AppendNibbleEscape<T, TPreset>(ref T output, SetAndState state, in TPreset preset)
         where T : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
-        append_switch_code(ref output, state);
-        append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Num], preset.HCodeLensSpan[(int)SetAndState.Num]);
-        append_bits(ref output, 0, 2);
+        AppendSwitchCode(ref output, state);
+        AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Num], preset.HCodeLensSpan[(int)SetAndState.Num]);
+        AppendBits(ref output, 0, 2);
     }
 
     /// <summary>
     /// Appends the terminator code depending on the state, preset and whether full terminator needs to be encoded to out or not
     /// </summary>
-    static void append_final_bits<T, TPreset>(ref T output, SetAndState state, bool is_all_upper, in TPreset preset)
+    static void AppendFinalBits<T, TPreset>(ref T output, SetAndState state, bool is_all_upper, in TPreset preset)
         where T : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
@@ -373,38 +373,38 @@ internal partial class Unishox
                 // for other state, switch to Num Set first
                 if (state == SetAndState.Delta)
                 {
-                    append_bits(ref output, UNI_STATE_SPL_CODE, Math.Min(UNI_STATE_SPL_CODE_LEN, 8 - output.RemainingBits));
+                    AppendBits(ref output, UNI_STATE_SPL_CODE, Math.Min(UNI_STATE_SPL_CODE_LEN, 8 - output.RemainingBits));
                     if (output.RemainingBits == 0)
                         return;
-                    append_bits(ref output, UNI_STATE_SW_CODE, Math.Min(UNI_STATE_SW_CODE_LEN, 8 - output.RemainingBits));
+                    AppendBits(ref output, UNI_STATE_SW_CODE, Math.Min(UNI_STATE_SW_CODE_LEN, 8 - output.RemainingBits));
                 }
                 else
-                    append_bits(ref output, SW_CODE, Math.Min(SW_CODE_LEN, 8 - output.RemainingBits));
+                    AppendBits(ref output, SW_CODE, Math.Min(SW_CODE_LEN, 8 - output.RemainingBits));
                 if (output.RemainingBits == 0)
                     return;
-                append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Num], Math.Min(preset.HCodeLensSpan[(int)SetAndState.Num], 8 - output.RemainingBits));
+                AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Num], Math.Min(preset.HCodeLensSpan[(int)SetAndState.Num], 8 - output.RemainingBits));
                 if (output.RemainingBits == 0)
                     return;
             }
-            append_bits(ref output, usx_vcodes[TERM_CODE & 0x1F], Math.Min(usx_vcode_lens[TERM_CODE & 0x1F], 8 - output.RemainingBits));
+            AppendBits(ref output, VCodes[TERM_CODE & 0x1F], Math.Min(VCodeLens[TERM_CODE & 0x1F], 8 - output.RemainingBits));
         }
         else
         {
             // preset 1, terminate at 2 or 3 SW_CODE, i.e., 4 or 6 continuous 0 bits
             // see discussion: https://github.com/siara-cc/Unishox/issues/19#issuecomment-922435580
-            append_bits(ref output, TERM_BYTE_PRESET_1, Math.Min(is_all_upper ? TERM_BYTE_PRESET_1_LEN_UPPER : TERM_BYTE_PRESET_1_LEN_LOWER, 8 - output.RemainingBits));
+            AppendBits(ref output, TERM_BYTE_PRESET_1, Math.Min(is_all_upper ? TERM_BYTE_PRESET_1_LEN_UPPER : TERM_BYTE_PRESET_1_LEN_LOWER, 8 - output.RemainingBits));
         }
         if (output.RemainingBits == 0)
             return;
         // fill uint8_t with the last bit
-        append_bits(ref output, output.LastBit ? (byte)0 : (byte)0xFF, 8 - output.RemainingBits);
+        AppendBits(ref output, output.LastBit ? (byte)0 : (byte)0xFF, 8 - output.RemainingBits);
     }
 
 
     /// <summary>
     /// Appends the terminator code depending on the state, preset and whether full terminator needs to be encoded to out or not
     /// </summary>
-    static void append_final_bits_full<T, TPreset>(ref T output, SetAndState state, bool is_all_upper, in TPreset preset)
+    static void AppendFinalBitsFull<T, TPreset>(ref T output, SetAndState state, bool is_all_upper, in TPreset preset)
         where T : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
@@ -414,27 +414,97 @@ internal partial class Unishox
             {
                 // for num state, append TERM_CODE directly
                 // for other state, switch to Num Set first
-                append_switch_code(ref output, state);
-                append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Num], preset.HCodeLensSpan[(int)SetAndState.Num]);
+                AppendSwitchCode(ref output, state);
+                AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Num], preset.HCodeLensSpan[(int)SetAndState.Num]);
             }
-            append_bits(ref output, usx_vcodes[TERM_CODE & 0x1F], usx_vcode_lens[TERM_CODE & 0x1F]);
+            AppendBits(ref output, VCodes[TERM_CODE & 0x1F], VCodeLens[TERM_CODE & 0x1F]);
         }
         else
         {
             // preset 1, terminate at 2 or 3 SW_CODE, i.e., 4 or 6 continuous 0 bits
             // see discussion: https://github.com/siara-cc/Unishox/issues/19#issuecomment-922435580
-            append_bits(ref output, TERM_BYTE_PRESET_1, is_all_upper ? TERM_BYTE_PRESET_1_LEN_UPPER : TERM_BYTE_PRESET_1_LEN_LOWER);
+            AppendBits(ref output, TERM_BYTE_PRESET_1, is_all_upper ? TERM_BYTE_PRESET_1_LEN_UPPER : TERM_BYTE_PRESET_1_LEN_LOWER);
         }
         // fill uint8_t with the last bit
-        append_bits(ref output, output.LastBit ? (byte)0 : (byte)0xFF, 8 - output.RemainingBits);
+        AppendBits(ref output, output.LastBit ? (byte)0 : (byte)0xFF, 8 - output.RemainingBits);
     }
 
-    public void unishox2_compress_lines<T, TPreset>(ReadOnlySpan<byte> input, ref T output, in TPreset preset, UnishoxLinkList? prev_lines = null, bool need_full_term_codes = false, byte UNISHOX_MAGIC_BITS = 0xFF, int UNISHOX_MAGIC_BIT_LEN = 1)
+    public static int CompressCount(
+        ReadOnlySpan<byte> input,
+        UnishoxLinkList? prev_lines = null,
+        bool need_full_term_codes = false,
+        byte magic_bits = 0xFF,
+        int magic_bit_len = 1)
+    {
+        return CompressCount(input, UnishoxPresets.Default, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+    }
+    public static int CompressCount<TPreset>(
+        ReadOnlySpan<byte> input,
+        in TPreset preset,
+        UnishoxLinkList? prev_lines = null,
+        bool need_full_term_codes = false,
+        byte magic_bits = 0xFF,
+        int magic_bit_len = 1)
+        where TPreset : IUnishoxPreset, allows ref struct
+    {
+        DummyOutput o = new();
+        Compress(input, ref o, in preset, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+        return o.Position;
+    }
+    public static int Compress(
+        ReadOnlySpan<byte> input,
+        Stream output,
+        UnishoxLinkList? prev_lines = null,
+        bool need_full_term_codes = false,
+        byte magic_bits = 0xFF,
+        int magic_bit_len = 1)
+    {
+        return Compress(input, output, UnishoxPresets.Default, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+    }
+    public static int Compress<TPreset>(
+        ReadOnlySpan<byte> input,
+        Stream output,
+        in TPreset preset,
+        UnishoxLinkList? prev_lines = null,
+        bool need_full_term_codes = false,
+        byte magic_bits = 0xFF,
+        int magic_bit_len = 1)
+        where TPreset : IUnishoxPreset, allows ref struct
+    {
+        StreamOutput o = new(output);
+        Compress(input, ref o, in preset, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+        return o.Position;
+    }
+    public static int Compress(
+        ReadOnlySpan<byte> input,
+        Span<byte> output,
+        UnishoxLinkList? prev_lines = null,
+        bool need_full_term_codes = false,
+        byte magic_bits = 0xFF,
+        int magic_bit_len = 1)
+    {
+        return Compress(input, output, UnishoxPresets.Default, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+    }
+    public static int Compress<TPreset>(
+        ReadOnlySpan<byte> input,
+        Span<byte> output,
+        in TPreset preset,
+        UnishoxLinkList? prev_lines = null,
+        bool need_full_term_codes = false,
+        byte magic_bits = 0xFF,
+        int magic_bit_len = 1)
+        where TPreset : IUnishoxPreset, allows ref struct
+    {
+        SpanOutput o = new(output);
+        Compress(input, ref o, in preset, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+        return o.Position;
+    }
+    public static void Compress<T, TPreset>(ReadOnlySpan<byte> input, ref T output, in TPreset preset, UnishoxLinkList? prev_lines = null, bool need_full_term_codes = false, byte magic_bits = 0xFF, int magic_bit_len = 1)
          where T : IUnishoxDataOutput, allows ref struct
          where TPreset : IUnishoxPreset, allows ref struct
     {
-        ArgumentOutOfRangeException.ThrowIfNegative(UNISHOX_MAGIC_BIT_LEN);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(UNISHOX_MAGIC_BIT_LEN, 8);
+        ArgumentOutOfRangeException.ThrowIfNegative(magic_bit_len);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(magic_bit_len, 8);
         SetAndState state;
 
         int l, ll;
@@ -444,7 +514,7 @@ internal partial class Unishox
         prev_uni = 0;
         state = SetAndState.Alpha;
         is_all_upper = false;
-        append_bits(ref output, UNISHOX_MAGIC_BITS, UNISHOX_MAGIC_BIT_LEN); // magic bit(s)
+        AppendBits(ref output, magic_bits, magic_bit_len); // magic bit(s)
         for (l = 0; l < input.Length; l++)
         {
 
@@ -452,14 +522,14 @@ internal partial class Unishox
             {
                 if (prev_lines is not null)
                 {
-                    l = matchLine(input, l, ref output, prev_lines, ref state, in preset);
+                    l = MatchLine(input, l, ref output, prev_lines, ref state, in preset);
                     if (l > 0)
                         continue;
                     l = -l;
                 }
                 else
                 {
-                    l = matchOccurance(input, l, ref output, ref state, in preset);
+                    l = MatchOccurance(input, l, ref output, ref state, in preset);
                     if (l > 0)
                         continue;
                     l = -l;
@@ -475,8 +545,8 @@ internal partial class Unishox
                     while (rpt_count < input.Length && input[rpt_count] == c_in)
                         rpt_count++;
                     rpt_count -= l;
-                    append_code(ref output, RPT_CODE, ref state, in preset);
-                    encodeCount(ref output, rpt_count - 4);
+                    AppendCode(ref output, RPT_CODE, ref state, in preset);
+                    EncodeCount(ref output, rpt_count - 4);
                     l += rpt_count;
                     l--;
                     continue;
@@ -494,7 +564,7 @@ internal partial class Unishox
                         byte c_uid = input[uid_pos];
                         if (c_uid == '-' && (uid_pos is 8 or 13 or 18 or 23))
                             continue;
-                        NibbleType nib_type = getNibbleType(c_uid);
+                        NibbleType nib_type = GetNibbleType(c_uid);
                         if (nib_type == NibbleType.Not)
                             break;
                         if (nib_type != NibbleType.Num)
@@ -506,14 +576,14 @@ internal partial class Unishox
                     }
                     if (uid_pos == l + 36)
                     {
-                        append_nibble_escape(ref output, state, in preset);
-                        append_bits(ref output, hex_type == NibbleType.HexLower ? (byte)0xC0 : (byte)0xF0,
+                        AppendNibbleEscape(ref output, state, in preset);
+                        AppendBits(ref output, hex_type == NibbleType.HexLower ? (byte)0xC0 : (byte)0xF0,
                                hex_type == NibbleType.HexLower ? 3 : 5);
                         for (uid_pos = l; uid_pos < l + 36; uid_pos++)
                         {
                             byte c_uid = input[uid_pos];
                             if (c_uid != '-')
-                                append_bits(ref output, getBaseCode(c_uid), 4);
+                                AppendBits(ref output, GetBaseCode(c_uid), 4);
                         }
                         l += 35;
                         continue;
@@ -526,7 +596,7 @@ internal partial class Unishox
                 int hex_len = 0;
                 do
                 {
-                    NibbleType nib_type = getNibbleType(input[l + hex_len]);
+                    NibbleType nib_type = GetNibbleType(input[l + hex_len]);
                     if (nib_type == NibbleType.Not)
                         break;
                     if (nib_type != NibbleType.Num)
@@ -541,12 +611,12 @@ internal partial class Unishox
                     hex_type = NibbleType.HexLower;
                 if ((hex_type == NibbleType.HexLower || hex_type == NibbleType.HexUpper) && hex_len > 3)
                 {
-                    append_nibble_escape(ref output, state, in preset);
-                    append_bits(ref output, hex_type == NibbleType.HexLower ? (byte)0x80 : (byte)0xE0, hex_type == NibbleType.HexLower ? 2 : 4);
-                    encodeCount(ref output, hex_len);
+                    AppendNibbleEscape(ref output, state, in preset);
+                    AppendBits(ref output, hex_type == NibbleType.HexLower ? (byte)0x80 : (byte)0xE0, hex_type == NibbleType.HexLower ? 2 : 4);
+                    EncodeCount(ref output, hex_len);
                     do
                     {
-                        append_bits(ref output, getBaseCode(input[l++]), 4);
+                        AppendBits(ref output, GetBaseCode(input[l++]), 4);
                     } while (--hex_len != 0);
                     l--;
                     continue;
@@ -568,8 +638,8 @@ internal partial class Unishox
                         c_in = input[l + j];
                         if (c_t is (byte)'f' or (byte)'F')
                         {
-                            if (getNibbleType(c_in) != (c_t == 'f' ? NibbleType.HexLower : NibbleType.HexUpper)
-                                     && getNibbleType(c_in) != NibbleType.Num)
+                            if (GetNibbleType(c_in) != (c_t == 'f' ? NibbleType.HexLower : NibbleType.HexUpper)
+                                     && GetNibbleType(c_in) != NibbleType.Num)
                             {
                                 break;
                             }
@@ -590,15 +660,15 @@ internal partial class Unishox
                     if (((float)j / rem) > 0.66f)
                     {
                         rem = rem - j;
-                        append_nibble_escape(ref output, state, in preset);
-                        append_bits(ref output, 0, 1);
-                        append_bits(ref output, (byte)(count_codes[i] & 0xF8), count_codes[i] & 0x07);
-                        encodeCount(ref output, rem);
+                        AppendNibbleEscape(ref output, state, in preset);
+                        AppendBits(ref output, 0, 1);
+                        AppendBits(ref output, (byte)(CountCodes[i] & 0xF8), CountCodes[i] & 0x07);
+                        EncodeCount(ref output, rem);
                         for (int k = 0; k < j; k++)
                         {
                             byte c_t = template[k];
                             if (c_t is (byte)'f' or (byte)'F')
-                                append_bits(ref output, getBaseCode(input[l + k]), 4);
+                                AppendBits(ref output, GetBaseCode(input[l + k]), 4);
                             else if (c_t is (byte)'r' or (byte)'t' or (byte)'o')
                             {
                                 c_t = c_t switch
@@ -607,7 +677,7 @@ internal partial class Unishox
                                     (byte)'t' => 3,
                                     _ => 1
                                 };
-                                append_bits(ref output, (byte)((input[l + k] - '0') << (8 - c_t)), c_t);
+                                AppendBits(ref output, (byte)((input[l + k] - '0') << (8 - c_t)), c_t);
                             }
                         }
                         l += j;
@@ -627,9 +697,9 @@ internal partial class Unishox
                     int seq_len = seq.Length;
                     if (input.Length - seq_len >= 0 && l <= input.Length - seq_len)
                     {
-                        if (seq.SequenceEqual(input.Slice(l, seq_len)) && preset.HCodeLensSpan[usx_freq_codes[i] >> 5] != 0)
+                        if (seq.SequenceEqual(input.Slice(l, seq_len)) && preset.HCodeLensSpan[FreqCodes[i] >> 5] != 0)
                         {
-                            append_code(ref output, usx_freq_codes[i], ref state, in preset);
+                            AppendCode(ref output, FreqCodes[i], ref state, in preset);
                             l += seq_len;
                             l--;
                             break;
@@ -650,8 +720,8 @@ internal partial class Unishox
                 if (is_all_upper)
                 {
                     is_all_upper = false;
-                    append_switch_code(ref output, state);
-                    append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
+                    AppendSwitchCode(ref output, state);
+                    AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
                     state = SetAndState.Alpha;
                 }
             }
@@ -659,17 +729,17 @@ internal partial class Unishox
             {
                 if (state == SetAndState.Num)
                 {
-                    append_switch_code(ref output, state);
-                    append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
+                    AppendSwitchCode(ref output, state);
+                    AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
                     state = SetAndState.Alpha;
                 }
-                append_switch_code(ref output, state);
-                append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
+                AppendSwitchCode(ref output, state);
+                AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
                 if (state == SetAndState.Delta)
                 {
                     state = SetAndState.Alpha;
-                    append_switch_code(ref output, state);
-                    append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
+                    AppendSwitchCode(ref output, state);
+                    AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
                 }
             }
             c_next = 0;
@@ -687,8 +757,8 @@ internal partial class Unishox
                     }
                     if (ll == l - 1)
                     {
-                        append_switch_code(ref output, state);
-                        append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
+                        AppendSwitchCode(ref output, state);
+                        AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
                         state = SetAndState.Alpha;
                         is_all_upper = true;
                     }
@@ -707,12 +777,12 @@ internal partial class Unishox
                         int spl_code_len = c_in switch
                         {
                             (byte)',' => 3,
-                            (byte)'t' => 4,
+                            // (byte)'t' => 4,
                             (byte)' ' => 1,
                             _ => 4
                         };
-                        append_bits(ref output, UNI_STATE_SPL_CODE, UNI_STATE_SPL_CODE_LEN);
-                        append_bits(ref output, spl_code, spl_code_len);
+                        AppendBits(ref output, UNI_STATE_SPL_CODE, UNI_STATE_SPL_CODE_LEN);
+                        AppendBits(ref output, spl_code, spl_code_len);
                         continue;
                     }
                 }
@@ -722,63 +792,63 @@ internal partial class Unishox
                 if (c_in == 0)
                 {
                     if (state == SetAndState.Num)
-                        append_bits(ref output, usx_vcodes[NUM_SPC_CODE & 0x1F], usx_vcode_lens[NUM_SPC_CODE & 0x1F]);
+                        AppendBits(ref output, VCodes[NUM_SPC_CODE & 0x1F], VCodeLens[NUM_SPC_CODE & 0x1F]);
                     else
-                        append_bits(ref output, usx_vcodes[1], usx_vcode_lens[1]);
+                        AppendBits(ref output, VCodes[1], VCodeLens[1]);
                 }
                 else
                 {
                     c_in--;
-                    append_code(ref output, usx_code_94[(int)c_in], ref state, in preset);
+                    AppendCode(ref output, Code94[(int)c_in], ref state, in preset);
                 }
             }
             else if (c_in == 13 && c_next == 10)
             {
-                append_code(ref output, CRLF_CODE, ref state, in preset);
+                AppendCode(ref output, CRLF_CODE, ref state, in preset);
                 l++;
             }
             else if (c_in == 10)
             {
                 if (state == SetAndState.Delta)
                 {
-                    append_bits(ref output, UNI_STATE_SPL_CODE, UNI_STATE_SPL_CODE_LEN);
-                    append_bits(ref output, 0xF0, 4);
+                    AppendBits(ref output, UNI_STATE_SPL_CODE, UNI_STATE_SPL_CODE_LEN);
+                    AppendBits(ref output, 0xF0, 4);
                 }
                 else
-                    append_code(ref output, LF_CODE, ref state, in preset);
+                    AppendCode(ref output, LF_CODE, ref state, in preset);
             }
             else if (c_in == 13)
-                append_code(ref output, CR_CODE, ref state, in preset);
+                AppendCode(ref output, CR_CODE, ref state, in preset);
             else if (c_in == '\t')
-                append_code(ref output, TAB_CODE, ref state, in preset);
+                AppendCode(ref output, TAB_CODE, ref state, in preset);
             else
             {
-                int uni = readUTF8(input, l, out int utf8len);
+                int uni = ReadUTF8(input, l, out int utf8len);
                 if (uni != 0)
                 {
                     l += utf8len;
                     if (state != SetAndState.Delta)
                     {
-                        int uni2 = readUTF8(input, l, out utf8len);
+                        int uni2 = ReadUTF8(input, l, out utf8len);
                         if (uni2 != 0)
                         {
                             if (state != SetAndState.Alpha)
                             {
-                                append_switch_code(ref output, state);
-                                append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
+                                AppendSwitchCode(ref output, state);
+                                AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
                             }
-                            append_switch_code(ref output, state);
-                            append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
-                            append_bits(ref output, usx_vcodes[1], usx_vcode_lens[1]); // code for space (' ')
+                            AppendSwitchCode(ref output, state);
+                            AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
+                            AppendBits(ref output, VCodes[1], VCodeLens[1]); // code for space (' ')
                             state = SetAndState.Delta;
                         }
                         else
                         {
-                            append_switch_code(ref output, state);
-                            append_bits(ref output, preset.HCodesSpan[(int)SetAndState.Delta], preset.HCodeLensSpan[(int)SetAndState.Delta]);
+                            AppendSwitchCode(ref output, state);
+                            AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Delta], preset.HCodeLensSpan[(int)SetAndState.Delta]);
                         }
                     }
-                    encodeUnicode(ref output, uni, prev_uni);
+                    EncodeUnicode(ref output, uni, prev_uni);
                     prev_uni = uni;
                     l--;
                 }
@@ -788,26 +858,26 @@ internal partial class Unishox
                     for (int bi = l + 1; bi < input.Length; bi++)
                     {
                         byte c_bi = input[bi];
-                        if (readUTF8(input, bi, out utf8len) != 0)
+                        if (ReadUTF8(input, bi, out _) != 0)
                             break;
                         if (bi < (input.Length - 4) && c_bi == input[bi - 1] && c_bi == input[bi + 1] && c_bi == input[bi + 2] && c_bi == input[bi + 3])
                             break;
                         bin_count++;
                     }
-                    append_nibble_escape(ref output, state, in preset);
-                    append_bits(ref output, 0xF8, 5);
-                    encodeCount(ref output, bin_count);
+                    AppendNibbleEscape(ref output, state, in preset);
+                    AppendBits(ref output, 0xF8, 5);
+                    EncodeCount(ref output, bin_count);
                     do
                     {
-                        append_bits(ref output, input[l++], 8);
+                        AppendBits(ref output, input[l++], 8);
                     } while (--bin_count != 0);
                     l--;
                 }
             }
         }
         if (need_full_term_codes)
-            append_final_bits_full(ref output, state, is_all_upper, in preset);
+            AppendFinalBitsFull(ref output, state, is_all_upper, in preset);
         else
-            append_final_bits(ref output, state, is_all_upper, in preset);
+            AppendFinalBits(ref output, state, is_all_upper, in preset);
     }
 }

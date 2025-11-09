@@ -119,7 +119,7 @@ public class UnishoxPresets
     /// <summary>
     /// Commonly occuring templates (ISO Date/Time, ISO Date, US Phone number, ISO Time)
     /// </summary>
-    static ReadOnlyMemory<ReadOnlyMemory<byte>> Templates { get; } = new ReadOnlyMemory<byte>[] { "tfff-of-tfTtf:rf:rf.fffZ"u8.ToArray(), "tfff-of-tf"u8.ToArray(), "(fff) fff-ffff"u8.ToArray(), "tf:rf:rf"u8.ToArray() };
+    static ReadOnlyMemory<ReadOnlyMemory<byte>> Templates { get; } = new ReadOnlyMemory<byte>[] { "tfff-of-tfTtf:rf:rf.fffZ"u8.ToArray(), "tfff-of-tf"u8.ToArray(), "(fff) fff-ffff"u8.ToArray(), "tf:rf:rf"u8.ToArray(), ReadOnlyMemory<byte>.Empty };
 
     /// <summary>
     /// Default preset parameter set. When composition of text is know beforehand, the other parameter sets in this section can be used to achieve more compression.

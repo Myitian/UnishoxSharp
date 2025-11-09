@@ -3,7 +3,7 @@ using UnishoxSharp.Common;
 
 namespace UnishoxSharp.V1;
 
-public partial class Unishox
+partial class Unishox
 {
     static void AppendBits<T>(ref T output, uint code, int clen, State state)
         where T : IUnishoxDataOutput, allows ref struct
