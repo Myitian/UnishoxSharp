@@ -18,7 +18,7 @@ internal ref struct SpanOutput(Span<byte> span) : IUnishoxTextOutput, IUnishoxDa
     }
     public void CopyFrom(int offset, int count) => Write(BaseSpan.Slice(Position - offset, count));
     public void WriteByte(byte value) => BaseSpan[Position++] = value;
-    public void Write(ReadOnlySpan<byte> buffer)
+    public void Write(scoped ReadOnlySpan<byte> buffer)
     {
         buffer.CopyTo(BaseSpan[Position..]);
         Position += buffer.Length;

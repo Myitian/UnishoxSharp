@@ -13,18 +13,11 @@ public interface IUnishoxPreset
     {
         try
         {
-            _ = preset.HCodesSpan[4];
-            _ = preset.HCodeLensSpan[4];
             if (preset.HasFreqSeq)
-            {
                 preset.GetFreqSeqSpan(4);
-
-            }
             if (preset.HasTemplates)
-            {
                 preset.GetFreqSeqSpan(5);
-            }
-            return true;
+            return preset.HCodesSpan.Length >= 5 && preset.HCodeLensSpan.Length >= 5;
         }
         catch
         {

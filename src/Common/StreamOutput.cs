@@ -40,7 +40,7 @@ internal struct StreamOutput(Stream stream)
         BaseStream.WriteByte(last = value);
         Position++;
     }
-    public void Write(ReadOnlySpan<byte> buffer)
+    public void Write(scoped ReadOnlySpan<byte> buffer)
     {
         BaseStream.Write(buffer);
         Position += buffer.Length;

@@ -105,21 +105,21 @@ public partial class Unishox
     {
         if (uni < (1 << 11))
         {
-            output.WriteByte((byte)(0xC0 | (uni >> 6)));
-            output.WriteByte((byte)(0x80 | (uni & 63)));
+            output.Write([(byte)(0xC0 | (uni >> 6)),
+                          (byte)(0x80 | (uni & 0x3F))]);
         }
         else if (uni < (1 << 16))
         {
-            output.WriteByte((byte)(0xE0 | (uni >> 12)));
-            output.WriteByte((byte)(0x80 | ((uni >> 6) & 63)));
-            output.WriteByte((byte)(0x80 | (uni & 63)));
+            output.Write([(byte)(0xE0 | (uni >> 12)),
+                          (byte)(0x80 | ((uni >> 6) & 0x3F)),
+                          (byte)(0x80 | (uni & 0x3F))]);
         }
         else
         {
-            output.WriteByte((byte)(0xF0 | (uni >> 18)));
-            output.WriteByte((byte)(0x80 | ((uni >> 12) & 63)));
-            output.WriteByte((byte)(0x80 | ((uni >> 6) & 63)));
-            output.WriteByte((byte)(0x80 | (uni & 63)));
+            output.Write([(byte)(0xF0 | (uni >> 18)),
+                          (byte)(0x80 | ((uni >> 12) & 0x3F)),
+                          (byte)(0x80 | ((uni >> 6) & 0x3F)),
+                          (byte)(0x80 | (uni & 0x3F))]);
         }
     }
 

@@ -12,7 +12,8 @@ Original Unishox: https://github.com/siara-cc/Unishox2
 
 ## TODOs
 
-- `Stream` Support
-- Better `Span` Support (e.g. length check)
-- Unishox 2
+- **\[WIP\]** Unishox 2
+  - [x] Translate From C: DONE!
+  - [ ] Rename Members: WIP
+  - [ ] Check & Test: WIP
 - Unishox 3 alpha/beta
