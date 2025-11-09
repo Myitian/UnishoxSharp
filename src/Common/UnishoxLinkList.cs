@@ -1,4 +1,4 @@
-namespace UnishoxSharp.V1;
+namespace UnishoxSharp.Common;
 
 public class UnishoxLinkList
 {

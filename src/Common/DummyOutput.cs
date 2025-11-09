@@ -13,18 +13,20 @@ internal struct DummyOutput() : IUnishoxTextOutput, IUnishoxDataOutput
         Position = bytePos;
         RemainingBits = bitPos;
     }
-    public void WriteBits(ushort bits, int count)
+    public bool WriteBits(ushort bits, int count)
     {
         RemainingBits += count;
         Position += RemainingBits / 8;
         RemainingBits %= 8;
+        return true;
     }
-    public void FlushBits()
+    public bool FlushBits()
     {
         if (RemainingBits > 0)
         {
             RemainingBits = 0;
             Position++;
         }
+        return true;
     }
 }

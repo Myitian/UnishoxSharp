@@ -2,16 +2,29 @@ using System.Buffers;
 
 namespace UnishoxSharp.Common;
 
-internal struct StreamOutput(Stream stream) : IUnishoxTextOutput, IUnishoxDataOutput
+/// <remarks>
+/// mixing calling to methods from <see cref="IUnishoxDataOutput"/> and <see cref="IUnishoxTextOutput"/> is undefined behavior!
+/// </remarks>
+internal struct StreamOutput(Stream stream)
+    : IUnishoxTextOutput, IUnishoxDataOutput
 {
     private byte last = 0, bits = 0;
     public readonly Stream BaseStream { get; } = stream;
+    public readonly bool LastBit => RemainingBits == 0 ?
+        Position != 0 && (last & 1) != 0 :
+        ((bits >> (8 - RemainingBits)) & 1) != 0;
     public int RemainingBits { get; private set; } = 0;
     public int Position { get; private set; } = 0;
     public void RepeatLast(int count)
     {
-        while (count-- > 0)
-            WriteByte(last);
+        Span<byte> buffer = stackalloc byte[Math.Min(count, 128)];
+        buffer.Fill(last);
+        while (count > 128)
+        {
+            Write(buffer);
+            count -= 128;
+        }
+        Write(buffer[..count]);
     }
     public void CopyFrom(int offset, int count)
     {
@@ -36,7 +49,6 @@ internal struct StreamOutput(Stream stream) : IUnishoxTextOutput, IUnishoxDataOu
     public void SeekBit(int bytePos, int bitPos)
     {
         BaseStream.Seek(bytePos - Position, SeekOrigin.Current);
-        // `last` is incorrect here! Do not call `RepeatLast` without writing after `SeekBit`.
         if (bitPos > 0)
         {
             bits = (byte)BaseStream.ReadByte();

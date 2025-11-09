@@ -1,4 +1,5 @@
 using System.Text;
+using UnishoxSharp.Common;
 using UnishoxSharp.V1;
 
 internal class Program

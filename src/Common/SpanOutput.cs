@@ -1,8 +1,14 @@
 namespace UnishoxSharp.Common;
 
+/// <remarks>
+/// mixing calling to methods from <see cref="IUnishoxDataOutput"/> and <see cref="IUnishoxTextOutput"/> is undefined behavior!
+/// </remarks>
 internal ref struct SpanOutput(Span<byte> span) : IUnishoxTextOutput, IUnishoxDataOutput
 {
     public Span<byte> BaseSpan { get; } = span;
+    public readonly bool LastBit => RemainingBits == 0 ?
+        Position != 0 && (BaseSpan[Position - 1] & 1) != 0 :
+        ((BaseSpan[Position] >> (8 - RemainingBits)) & 1) != 0;
     public int RemainingBits { get; private set; } = 0;
     public int Position { get; private set; } = 0;
     public void RepeatLast(int count)
