@@ -29,6 +29,9 @@ public struct StreamInput(Stream stream) : IUnishoxDataInput
         if (read == 0)
             ReadByte();
         int result = (last >> ((read - 1) << 3)) & (0x80 >> BitPos);
+#if EXDEBUG
+        Console.WriteLine($"{autoForward}  {Position}+{BitPos} : {result}");
+#endif
         if (autoForward && ++BitPos == 8)
         {
             if (read == 0)
@@ -64,6 +67,9 @@ public struct StreamInput(Stream stream) : IUnishoxDataInput
         else
             char_pos--;
         code |= (byte)(((last >> (char_pos << 3)) & 0xFF) >> (8 - bit_pos));
+#if EXDEBUG
+        Console.WriteLine($"{autoForward}  {Position}+{BitPos} : {code:X2}({code})");
+#endif
         if (autoForward)
         {
             read--;
@@ -76,7 +82,7 @@ public struct StreamInput(Stream stream) : IUnishoxDataInput
         int newPos = BitPos + count;
         if (read == 0)
             ReadByte();
-        while (newPos > 8)
+        while (newPos >= 8)
         {
             if (read == 0)
                 ReadByte();

@@ -17,6 +17,9 @@ public ref struct SpanInput(ReadOnlySpan<byte> span) : IUnishoxDataInput
     public int ReadBit(bool autoForward)
     {
         int result = BaseSpan[Position] & (0x80 >> BitPos);
+#if EXDEBUG
+        Console.WriteLine($"{autoForward}  {Position}+{BitPos} : {result}");
+#endif
         if (autoForward && ++BitPos == 8)
         {
             BitPos = 0;
@@ -36,6 +39,9 @@ public ref struct SpanInput(ReadOnlySpan<byte> span) : IUnishoxDataInput
             code |= (byte)(input[char_pos] >> (8 - bit_pos));
         else
             code |= (byte)(0xFF >> (8 - bit_pos));
+#if EXDEBUG
+        Console.WriteLine($"{autoForward}  {Position}+{BitPos} : {code:X2}({code})");
+#endif
         if (autoForward)
             Position++;
         return code;

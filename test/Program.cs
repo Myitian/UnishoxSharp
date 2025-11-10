@@ -9,6 +9,8 @@ class Program
 {
     private static int Main()
     {
+        Console.InputEncoding = Encoding.UTF8;
+        Console.OutputEncoding = Encoding.UTF8;
         if (!Check())
             return 1;
         using MemoryStream bk = new();
@@ -35,7 +37,7 @@ class Program
             int lenV1d = UnishoxV1.Decompress(ns, msTest, linkList);
             byte[] dataV1d = msTest.ToArray();
             Console.WriteLine($"V1d :{BytesToString(dataV1d)}");
-            Console.WriteLine($"V1x:{Encoding.UTF8.GetString(dataV1d)}");
+            Console.WriteLine($"V1x :{Encoding.UTF8.GetString(dataV1d)}");
             bool statusV1 = src.AsSpan().SequenceEqual(dataV1d);
             Console.WriteLine($"V1s :{lenV1cC}/{lenV1c} {lenV1dC}/{lenV1d} {statusV1}");
 
@@ -91,7 +93,7 @@ class Program
         msTest.Position = 0;
         msTest.CopyTo(msT2);
         msTest.SetLength(0);
-        //msT2.Write("abcdefg"u8); // Extra data test
+        msT2.Write("abcdefg"u8); // Extra data test
         msT2.Position = 0;
         int len2 = UnishoxV2.Decompress(msT2, msTest, null);
         byte[] data2 = msTest.ToArray();

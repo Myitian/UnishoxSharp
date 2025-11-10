@@ -1,4 +1,9 @@
 <Solution>
+  <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="ExDebug" />
+    <BuildType Name="Release" />
+  </Configurations>
   <Project Path="example/Example.csproj" Id="0a9e0153-a199-47ed-a995-96053dcc3fad" />
   <Project Path="src/UnishoxSharp.csproj" />
   <Project Path="test/Test.csproj" Id="ad7fbcab-e146-45c3-920c-d11470a2b1ba" />
