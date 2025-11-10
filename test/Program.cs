@@ -23,52 +23,91 @@ class Program
             Console.WriteLine($"src :{BytesToString(src)}");
             Console.WriteLine($"srcs:{src.Length}");
 
-            msTest.SetLength(0);
-            int lenV1cC = UnishoxV1.CompressCount(src, linkList);
-            int lenV1c = UnishoxV1.Compress(src, msTest, linkList);
-            byte[] dataV1c = msTest.ToArray();
-            Console.WriteLine($"V1c :{BytesToString(dataV1c)}");
-            msTest.SetLength(0);
-            int lenV1dC = UnishoxV1.DecompressCount(dataV1c, linkList);
-            int lenV1d = UnishoxV1.Decompress(dataV1c, msTest, linkList);
-            byte[] dataV1d = msTest.ToArray();
-            Console.WriteLine($"V1d :{BytesToString(dataV1d)}");
-            Console.WriteLine($"V1x :{Encoding.UTF8.GetString(dataV1d)}");
-            bool statusV1 = src.AsSpan().SequenceEqual(dataV1d);
-            Console.WriteLine($"V1s :{lenV1cC}/{lenV1c} {lenV1dC}/{lenV1d} {statusV1}");
+            try
+            {
+                msTest.SetLength(0);
+                int lenV1cC = UnishoxV1.CompressCount(src, linkList);
+                int lenV1c = UnishoxV1.Compress(src, msTest, linkList);
+                byte[] dataV1c = msTest.ToArray();
+                Console.WriteLine($"V1c :{BytesToString(dataV1c)}");
+                msTest.SetLength(0);
+                int lenV1dC = UnishoxV1.DecompressCount(dataV1c, linkList);
+                int lenV1d = UnishoxV1.Decompress(dataV1c, msTest, linkList);
+                byte[] dataV1d = msTest.ToArray();
+                Console.WriteLine($"V1d :{BytesToString(dataV1d)}");
+                Console.WriteLine($"V1x :{Encoding.UTF8.GetString(dataV1d)}");
+                bool statusV1 = src.AsSpan().SequenceEqual(dataV1d);
+                Console.Write($"V1s :{lenV1cC}/{lenV1c} {lenV1dC}/{lenV1d} ");
+                Console.ForegroundColor = statusV1 ? ConsoleColor.Green : ConsoleColor.Red;
+                Console.WriteLine(statusV1);
+                Console.ResetColor();
+            }
+            catch (Exception ex)
+            {
+                Console.ResetColor();
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine(ex);
+                Console.ResetColor();
+            }
 
-            msTest.SetLength(0);
-            int lenV2FcC = UnishoxV2.CompressCount(src, linkList, true);
-            int lenV2Fc = UnishoxV2.Compress(src, msTest, linkList, true);
-            byte[] dataV2Fc = msTest.ToArray();
-            Console.WriteLine($"V2Fc:{BytesToString(dataV2Fc)}");
-            msTest.SetLength(0);
-            bk.SetLength(0);
-            bk.Write(dataV2Fc);
-            bk.Write("123456789"u8); // Extra data test
-            bk.Position = 0;
-            int lenV2FdC = UnishoxV2.DecompressCount(bk, linkList);
-            bk.Position = 0;
-            int lenV2Fd = UnishoxV2.Decompress(bk, msTest, linkList);
-            byte[] dataV2Fd = msTest.ToArray();
-            Console.WriteLine($"V2Fd:{BytesToString(dataV2Fd)}");
-            Console.WriteLine($"V2Fx:{Encoding.UTF8.GetString(dataV2Fd)}");
-            bool statusV2F = src.AsSpan().SequenceEqual(dataV2Fd);
-            Console.WriteLine($"V2Fs:{lenV2FcC}/{lenV2Fc} {lenV2FdC}/{lenV2Fd} {statusV2F}");
+            try
+            {
+                msTest.SetLength(0);
+                int lenV2FcC = UnishoxV2.CompressCount(src, linkList, true);
+                int lenV2Fc = UnishoxV2.Compress(src, msTest, linkList, true);
+                byte[] dataV2Fc = msTest.ToArray();
+                Console.WriteLine($"V2Fc:{BytesToString(dataV2Fc)}");
+                msTest.SetLength(0);
+                bk.SetLength(0);
+                bk.Write(dataV2Fc);
+                bk.Write("123456789"u8); // Extra data test
+                bk.Position = 0;
+                int lenV2FdC = UnishoxV2.DecompressCount(bk, linkList);
+                bk.Position = 0;
+                int lenV2Fd = UnishoxV2.Decompress(bk, msTest, linkList);
+                byte[] dataV2Fd = msTest.ToArray();
+                Console.WriteLine($"V2Fd:{BytesToString(dataV2Fd)}");
+                Console.WriteLine($"V2Fx:{Encoding.UTF8.GetString(dataV2Fd)}");
+                bool statusV2F = src.AsSpan().SequenceEqual(dataV2Fd);
+                Console.Write($"V2Fs:{lenV2FcC}/{lenV2Fc} {lenV2FdC}/{lenV2Fd} ");
+                Console.ForegroundColor = statusV2F ? ConsoleColor.Green : ConsoleColor.Red;
+                Console.WriteLine(statusV2F);
+                Console.ResetColor();
+            }
+            catch (Exception ex)
+            {
+                Console.ResetColor();
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine(ex);
+                Console.ResetColor();
+            }
 
-            msTest.SetLength(0);
-            int lenV2NcC = UnishoxV2.CompressCount(src, linkList);
-            int lenV2Nc = UnishoxV2.Compress(src, msTest, linkList);
-            byte[] dataV2Nc = msTest.ToArray();
-            Console.WriteLine($"V2Nc:{BytesToString(dataV2Nc)}");
-            msTest.SetLength(0);
-            int lenV2NdC = UnishoxV2.DecompressCount(dataV2Fc, linkList);
-            int lenV2Nd = UnishoxV2.Decompress(dataV2Fc, msTest, linkList);
-            byte[] dataV2Nd = msTest.ToArray();
-            Console.WriteLine($"V2Nd:{BytesToString(dataV2Nd)}");
-            Console.WriteLine($"V2Nx:{Encoding.UTF8.GetString(dataV2Nd)}");
-            bool statusV2N = src.AsSpan().SequenceEqual(dataV2Nd);
-            Console.WriteLine($"V2Ns:{lenV2NcC}/{lenV2Nc} {lenV2NdC}/{lenV2Nd} {statusV2N}");
+            try
+            {
+                msTest.SetLength(0);
+                int lenV2NcC = UnishoxV2.CompressCount(src, linkList);
+                int lenV2Nc = UnishoxV2.Compress(src, msTest, linkList);
+                byte[] dataV2Nc = msTest.ToArray();
+                Console.WriteLine($"V2Nc:{BytesToString(dataV2Nc)}");
+                msTest.SetLength(0);
+                int lenV2NdC = UnishoxV2.DecompressCount(dataV2Nc, linkList);
+                int lenV2Nd = UnishoxV2.Decompress(dataV2Nc, msTest, linkList);
+                byte[] dataV2Nd = msTest.ToArray();
+                Console.WriteLine($"V2Nd:{BytesToString(dataV2Nd)}");
+                Console.WriteLine($"V2Nx:{Encoding.UTF8.GetString(dataV2Nd)}");
+                bool statusV2N = src.AsSpan().SequenceEqual(dataV2Nd);
+                Console.Write($"V2Ns:{lenV2NcC}/{lenV2Nc} {lenV2NdC}/{lenV2Nd} ");
+                Console.ForegroundColor = statusV2N ? ConsoleColor.Green : ConsoleColor.Red;
+                Console.WriteLine(statusV2N);
+                Console.ResetColor();
+            }
+            catch (Exception ex)
+            {
+                Console.ResetColor();
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine(ex);
+                Console.ResetColor();
+            }
             linkList = new()
             {
                 Data = src,
@@ -102,6 +141,7 @@ class Program
         if (!status)
         {
             Console.WriteLine("V2 FAILED!");
+            Console.WriteLine(Encoding.UTF8.GetString(chars));
             Console.WriteLine(BytesToString(chars));
             Console.WriteLine(BytesToString(data));
             Console.WriteLine(BytesToString(data.AsSpan(0, len)));
@@ -129,10 +169,11 @@ class Program
         byte[] data3 = msTest.ToArray();
 
         msTest.SetLength(0);
-        bool status = chars.SequenceEqual(data2);
+        bool status = chars.SequenceEqual(data2) && chars.SequenceEqual(data3);
         if (!status)
         {
             Console.WriteLine("V1 FAILED!");
+            Console.WriteLine(Encoding.UTF8.GetString(chars));
             Console.WriteLine(BytesToString(chars));
             Console.WriteLine(BytesToString(data));
             Console.WriteLine(BytesToString(data.AsSpan(0, len)));

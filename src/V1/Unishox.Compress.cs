@@ -339,18 +339,19 @@ partial class Unishox
         using IMemoryOwner<byte>? memo = mem;
         for (; input.Position < input.Length; input.Position++)
         {
-            byte c_in = (byte)input.ReadByteAt(input.Position);
-            if (state != State.UNI && input.Position != 0 && input.Position < input.Length - 4)
+            int input_pos = input.Position;
+            byte c_in = (byte)input.ReadByteAt(input_pos);
+            if (state != State.UNI && input_pos != 0 && input_pos < input.Length - 4)
             {
-                if (c_in == input.ReadByteAt(input.Position - 1)
-                    && c_in == input.ReadByteAt(input.Position + 1)
-                    && c_in == input.ReadByteAt(input.Position + 2)
-                    && c_in == input.ReadByteAt(input.Position + 3))
+                if (c_in == input.ReadByteAt(input_pos - 1)
+                    && c_in == input.ReadByteAt(input_pos + 1)
+                    && c_in == input.ReadByteAt(input_pos + 2)
+                    && c_in == input.ReadByteAt(input_pos + 3))
                 {
-                    int rpt_count = input.Position + 4;
+                    int rpt_count = input_pos + 4;
                     while (rpt_count < input.Length && input.ReadByteAt(rpt_count) == c_in)
                         rpt_count++;
-                    rpt_count -= input.Position;
+                    rpt_count -= input_pos;
                     if (state == State.S2 || is_all_upper)
                     {
                         is_all_upper = false;
@@ -359,11 +360,11 @@ partial class Unishox
                     }
                     AppendBits(ref output, RPT_CODE, RPT_CODE_LEN, State.S1);
                     EncodeCount(ref output, rpt_count - 4);
-                    input.Position += rpt_count - 1;
+                    input.Position = input_pos+ rpt_count - 1;
                     continue;
                 }
             }
-            if (to_match_repeats && input.Position < (input.Length - NICE_LEN + 1))
+            if (to_match_repeats && input_pos < (input.Length - NICE_LEN + 1))
             {
                 if (prev_lines is not null)
                 {
@@ -373,7 +374,7 @@ partial class Unishox
                 }
                 else if (use_64k_lookup)
                 {
-                    int to_lookup = c_in ^ input.ReadByteAt(input.Position + 1) + ((input.ReadByteAt(input.Position + 2) ^ input.ReadByteAt(input.Position + 3)) << 8);
+                    int to_lookup = c_in ^ input.ReadByteAt(input_pos + 1) + ((input.ReadByteAt(input_pos + 2) ^ input.ReadByteAt(input_pos + 3)) << 8);
                     if (lookup[to_lookup] != 0)
                     {
                         bool success = MatchOccurance(ref input, ref output, ref state, ref is_all_upper);
@@ -422,20 +423,20 @@ partial class Unishox
                 }
             }
             int c_next = 0;
-            if (input.Position + 1 < input.Length)
-                c_next = input.ReadByteAt(input.Position + 1);
+            if (input_pos + 1 < input.Length)
+                c_next = input.ReadByteAt(input_pos + 1);
 
             if (c_in is >= 32 and <= 126)
             {
                 if (is_upper && !is_all_upper)
                 {
                     int ll;
-                    for (ll = input.Position + 5; ll >= input.Position && ll < input.Length; ll--)
+                    for (ll = input_pos + 5; ll >= input_pos && ll < input.Length; ll--)
                     {
                         if (input.ReadByteAt(ll) is >= (byte)'A' and <= (byte)'Z')
                             break;
                     }
-                    if (ll == input.Position - 1)
+                    if (ll == input_pos - 1)
                     {
                         AppendBits(ref output, ALL_UPPER_CODE, ALL_UPPER_CODE_LEN, state);
                         is_all_upper = true;
@@ -457,7 +458,7 @@ partial class Unishox
             else if (c_in == 13 && c_next == 10)
             {
                 AppendBits(ref output, CRLF_CODE, CRLF_CODE_LEN, state);
-                input.Position = input.Position + 1;
+                input.Position = input_pos + 1;
             }
             else if (c_in == 10)
                 AppendBits(ref output, LF_CODE, LF_CODE_LEN, state);

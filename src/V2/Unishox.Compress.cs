@@ -147,48 +147,50 @@ partial class Unishox
     /// <summary>
     /// Reads UTF-8 character from input. Also returns the number of bytes occupied by the UTF-8 character in utf8len
     /// </summary>
-    static int ReadUTF8(scoped ReadOnlySpan<byte> input, int l, out int utf8len)
+    static int ReadUTF8<TIn>(ref TIn input, out int utf8len, int offset = 0)
+        where TIn : IUnishoxTextInput, allows ref struct
     {
+        int input_pos = input.Position + offset;
         int ret = 0;
-        if (l < (input.Length - 1)
-            && (input[l] & 0xE0) == 0xC0
-            && (input[l + 1] & 0xC0) == 0x80)
+        if (input_pos < (input.Length - 1)
+            && (input.ReadByteAt(input_pos) & 0xE0) == 0xC0
+            && (input.ReadByteAt(input_pos + 1) & 0xC0) == 0x80)
         {
             utf8len = 2;
-            ret = input[l] & 0x1F;
+            ret = input.ReadByteAt(input_pos) & 0x1F;
             ret <<= 6;
-            ret += input[l + 1] & 0x3F;
+            ret += input.ReadByteAt(input_pos + 1) & 0x3F;
             if (ret < 0x80)
                 ret = 0;
         }
-        else if (l < (input.Length - 2)
-            && (input[l] & 0xF0) == 0xE0
-            && (input[l + 1] & 0xC0) == 0x80
-            && (input[l + 2] & 0xC0) == 0x80)
+        else if (input_pos < (input.Length - 2)
+            && (input.ReadByteAt(input_pos) & 0xF0) == 0xE0
+            && (input.ReadByteAt(input_pos + 1) & 0xC0) == 0x80
+            && (input.ReadByteAt(input_pos + 2) & 0xC0) == 0x80)
         {
             utf8len = 3;
-            ret = input[l] & 0x0F;
+            ret = input.ReadByteAt(input_pos) & 0x0F;
             ret <<= 6;
-            ret += input[l + 1] & 0x3F;
+            ret += input.ReadByteAt(input_pos + 1) & 0x3F;
             ret <<= 6;
-            ret += input[l + 2] & 0x3F;
+            ret += input.ReadByteAt(input_pos + 2) & 0x3F;
             if (ret < 0x0800)
                 ret = 0;
         }
-        else if (l < (input.Length - 3)
-            && (input[l] & 0xF8) == 0xF0
-            && (input[l + 1] & 0xC0) == 0x80
-            && (input[l + 2] & 0xC0) == 0x80
-            && (input[l + 3] & 0xC0) == 0x80)
+        else if (input_pos < (input.Length - 3)
+            && (input.ReadByteAt(input_pos) & 0xF8) == 0xF0
+            && (input.ReadByteAt(input_pos + 1) & 0xC0) == 0x80
+            && (input.ReadByteAt(input_pos + 2) & 0xC0) == 0x80
+            && (input.ReadByteAt(input_pos + 3) & 0xC0) == 0x80)
         {
             utf8len = 4;
-            ret = input[l] & 0x07;
+            ret = input.ReadByteAt(input_pos) & 0x07;
             ret <<= 6;
-            ret += input[l + 1] & 0x3F;
+            ret += input.ReadByteAt(input_pos + 1) & 0x3F;
             ret <<= 6;
-            ret += input[l + 2] & 0x3F;
+            ret += input.ReadByteAt(input_pos + 2) & 0x3F;
             ret <<= 6;
-            ret += input[l + 3] & 0x3F;
+            ret += input.ReadByteAt(input_pos + 3) & 0x3F;
             if (ret < 0x10000)
                 ret = 0;
         }
@@ -203,27 +205,31 @@ partial class Unishox
     /// This is also used for Unicode strings<br />
     /// This is a crude implementation that is not optimized. Assuming only short strings are encoded, this is not much of an issue.
     /// </summary>
-    static int MatchOccurance<TOut, TPreset>(scoped ReadOnlySpan<byte> input, int l, ref TOut output, ref SetAndState state, in TPreset preset)
+    static bool MatchOccurance<TIn, TOut, TPreset>(ref TIn input, ref TOut output, ref SetAndState state, in TPreset preset)
+        where TIn : IUnishoxTextInput, allows ref struct
         where TOut : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
-        int j, k;
+        int input_pos = input.Position;
+        int input_len = input.Length;
         int longest_dist = 0;
         int longest_len = 0;
-        for (j = l - NICE_LEN; j >= 0; j--)
+        for (int j = input_pos - NICE_LEN; j >= 0; j--)
         {
-            for (k = l; k < input.Length && j + k - l < l; k++)
+            int k1 = input_pos;
+            int k2 = j;
+            for (; k1 < input_len && k2 < input_pos; k1++, k2++)
             {
-                if (input[k] != input[j + k - l])
+                if (input.ReadByteAt(k1) != input.ReadByteAt(k2))
                     break;
             }
-            if (k < input.Length)
-                while ((input[k] >> 6) == 2)
-                    k--; // Skip partial UTF-8 matches
-            if ((k - l) > (NICE_LEN - 1))
+            if (k1 < input_len)
+                while ((input.ReadByteAt(k1) >> 6) == 2)
+                    k1--; // Skip partial UTF-8 matches
+            if ((k1 - input_pos) > (NICE_LEN - 1))
             {
-                int match_len = k - l - NICE_LEN;
-                int match_dist = l - j - NICE_LEN + 1;
+                int match_len = k1 - input_pos - NICE_LEN;
+                int match_dist = input_pos - j - NICE_LEN + 1;
                 if (match_len > longest_len)
                 {
                     longest_len = match_len;
@@ -237,11 +243,10 @@ partial class Unishox
             AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Dict], preset.HCodeLensSpan[(int)SetAndState.Dict]);
             EncodeCount(ref output, longest_len);
             EncodeCount(ref output, longest_dist);
-            l += longest_len + NICE_LEN;
-            l--;
-            return l;
+            input.Position = input_pos + longest_len + NICE_LEN - 1;
+            return true;
         }
-        return -l;
+        return false;
     }
 
     /// <summary>
@@ -251,10 +256,13 @@ partial class Unishox
     /// This is also used for Unicode strings<br />
     /// This is a crude implementation that is not optimized. Assuming only short strings are encoded, this is not much of an issue.
     /// </summary>
-    static int MatchLine<TOut, TPreset>(scoped ReadOnlySpan<byte> input, int l, ref TOut output, UnishoxLinkList? prev_lines, ref SetAndState state, in TPreset preset)
+    static bool MatchLine<TIn, TOut, TPreset>(ref TIn input, ref TOut output, UnishoxLinkList? prev_lines, ref SetAndState state, in TPreset preset)
+        where TIn : IUnishoxTextInput, allows ref struct
         where TOut : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
+        int input_pos = input.Position;
+        int input_len = input.Length;
         int last_op = output.Position;
         int last_ob = output.RemainingBits;
         int last_len = 0;
@@ -263,21 +271,22 @@ partial class Unishox
         int j = 0;
         while (prev_lines is not null)
         {
-            int i, k;
             ReadOnlySpan<byte> prev_lines_data = prev_lines.Data.Span;
             int line_len = prev_lines_data.Length;
-            int limit = line_ctr == 0 ? l : line_len;
+            int limit = line_ctr == 0 ? input_pos : line_len;
             for (; j < limit; j++)
             {
-                for (i = l, k = j; k < line_len && i < input.Length; k++, i++)
+                int k1 = j;
+                int k2 = input_pos;
+                for (; k1 < line_len && k2 < input_len; k1++, k2++)
                 {
-                    if (prev_lines_data[k] != input[i])
+                    if (prev_lines_data[k1] != input.ReadByteAt(k2))
                         break;
                 }
-                if (k < line_len)
-                    while ((prev_lines_data[k] >> 6) == 2)
-                        k--; // Skip partial UTF-8 matches
-                if ((k - j) >= NICE_LEN)
+                if (k1 < line_len)
+                    while ((prev_lines_data[k1] >> 6) == 2)
+                        k1--; // Skip partial UTF-8 matches
+                if ((k1 - j) >= NICE_LEN)
                 {
                     if (last_len != 0)
                     {
@@ -285,7 +294,7 @@ partial class Unishox
                             continue;
                         output.SeekBit(last_op, last_ob);
                     }
-                    last_len = k - j;
+                    last_len = k1 - j;
                     last_dist = j;
                     int last_ctx = line_ctr;
                     AppendSwitchCode(ref output, state);
@@ -300,12 +309,8 @@ partial class Unishox
             prev_lines = prev_lines.Previous;
         }
         if (last_len != 0)
-        {
-            l += last_len;
-            l--;
-            return l;
-        }
-        return -l;
+            return (input.Position = input_pos + last_len - 1) != 0;
+        return false;
     }
 
     /// <summary>
@@ -428,19 +433,9 @@ partial class Unishox
         byte magic_bits = 0xFF,
         int magic_bit_len = 1)
     {
-        return CompressCount(input, UnishoxPresets.Default, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
-    }
-    public static int CompressCount<TPreset>(
-        ReadOnlySpan<byte> input,
-        in TPreset preset,
-        UnishoxLinkList? prev_lines = null,
-        bool need_full_term_codes = false,
-        byte magic_bits = 0xFF,
-        int magic_bit_len = 1)
-        where TPreset : IUnishoxPreset, allows ref struct
-    {
+        SpanInput i = new(input);
         DummyOutput o = new();
-        Compress(input, ref o, in preset, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+        Compress(ref i, ref o, UnishoxPresets.Default, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
         return o.Position;
     }
     public static int Compress(
@@ -451,20 +446,9 @@ partial class Unishox
         byte magic_bits = 0xFF,
         int magic_bit_len = 1)
     {
-        return Compress(input, output, UnishoxPresets.Default, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
-    }
-    public static int Compress<TPreset>(
-        ReadOnlySpan<byte> input,
-        Stream output,
-        in TPreset preset,
-        UnishoxLinkList? prev_lines = null,
-        bool need_full_term_codes = false,
-        byte magic_bits = 0xFF,
-        int magic_bit_len = 1)
-        where TPreset : IUnishoxPreset, allows ref struct
-    {
+        SpanInput i = new(input);
         StreamOutput o = new(output);
-        Compress(input, ref o, in preset, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+        Compress(ref i, ref o, UnishoxPresets.Default, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
         return o.Position;
     }
     public static int Compress(
@@ -475,85 +459,104 @@ partial class Unishox
         byte magic_bits = 0xFF,
         int magic_bit_len = 1)
     {
-        return Compress(input, output, UnishoxPresets.Default, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+        SpanInput i = new(input);
+        SpanOutput o = new(output);
+        Compress(ref i, ref o, UnishoxPresets.Default, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+        return o.Position;
     }
-    public static int Compress<TPreset>(
-        ReadOnlySpan<byte> input,
-        Span<byte> output,
-        in TPreset preset,
+    public static int CompressCount(
+        Stream input,
         UnishoxLinkList? prev_lines = null,
         bool need_full_term_codes = false,
         byte magic_bits = 0xFF,
         int magic_bit_len = 1)
-        where TPreset : IUnishoxPreset, allows ref struct
     {
-        SpanOutput o = new(output);
-        Compress(input, ref o, in preset, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+        StreamInput i = new(input);
+        DummyOutput o = new();
+        Compress(ref i, ref o, UnishoxPresets.Default, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
         return o.Position;
     }
-    public static void Compress<TOut, TPreset>(scoped ReadOnlySpan<byte> input, ref TOut output, in TPreset preset, UnishoxLinkList? prev_lines = null, bool need_full_term_codes = false, byte magic_bits = 0xFF, int magic_bit_len = 1)
-         where TOut : IUnishoxDataOutput, allows ref struct
-         where TPreset : IUnishoxPreset, allows ref struct
+    public static int Compress(
+        Stream input,
+        Stream output,
+        UnishoxLinkList? prev_lines = null,
+        bool need_full_term_codes = false,
+        byte magic_bits = 0xFF,
+        int magic_bit_len = 1)
+    {
+        StreamInput i = new(input);
+        StreamOutput o = new(output);
+        Compress(ref i, ref o, UnishoxPresets.Default, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+        return o.Position;
+    }
+    public static int Compress(
+        Stream input,
+        Span<byte> output,
+        UnishoxLinkList? prev_lines = null,
+        bool need_full_term_codes = false,
+        byte magic_bits = 0xFF,
+        int magic_bit_len = 1)
+    {
+        StreamInput i = new(input);
+        SpanOutput o = new(output);
+        Compress(ref i, ref o, UnishoxPresets.Default, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
+        return o.Position;
+    }
+    public static void Compress<TIn, TOut, TPreset>(ref TIn input, ref TOut output, in TPreset preset, UnishoxLinkList? prev_lines = null, bool need_full_term_codes = false, byte magic_bits = 0xFF, int magic_bit_len = 1)
+        where TIn : IUnishoxTextInput, allows ref struct
+        where TOut : IUnishoxDataOutput, allows ref struct
+        where TPreset : IUnishoxPreset, allows ref struct
     {
         ArgumentOutOfRangeException.ThrowIfNegative(magic_bit_len);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(magic_bit_len, 8);
-        SetAndState state;
-
-        int l, ll;
-        byte c_in, c_next;
-        int prev_uni;
-        bool is_upper, is_all_upper;
-        prev_uni = 0;
-        state = SetAndState.Alpha;
-        is_all_upper = false;
+        SetAndState state = SetAndState.Alpha;
+        int prev_uni = 0;
+        bool is_all_upper = false;
         AppendBits(ref output, magic_bits, magic_bit_len); // magic bit(s)
-        for (l = 0; l < input.Length; l++)
+        for (; input.Position < input.Length; input.Position++)
         {
-
-            if (preset.HCodeLensSpan[(int)SetAndState.Dict] != 0 && l < (input.Length - NICE_LEN + 1))
+            int input_pos = input.Position;
+            if (preset.HCodeLensSpan[(int)SetAndState.Dict] != 0 && input_pos < (input.Length - NICE_LEN + 1))
             {
                 if (prev_lines is not null)
                 {
-                    l = MatchLine(input, l, ref output, prev_lines, ref state, in preset);
-                    if (l > 0)
+                    bool status = MatchLine(ref input, ref output, prev_lines, ref state, in preset);
+                    if (status)
                         continue;
-                    l = -l;
                 }
                 else
                 {
-                    l = MatchOccurance(input, l, ref output, ref state, in preset);
-                    if (l > 0)
+                    bool status = MatchOccurance(ref input, ref output, ref state, in preset);
+                    if (status)
                         continue;
-                    l = -l;
                 }
             }
 
-            c_in = input[l];
-            if (l != 0 && input.Length > 4 && l < (input.Length - 4) && preset.HCodeLensSpan[(int)SetAndState.Num] != 0)
+            byte c_in = (byte)input.ReadByteAt(input_pos);
+            if (input_pos != 0 && input.Length > 4 && input_pos < (input.Length - 4) && preset.HCodeLensSpan[(int)SetAndState.Num] != 0)
             {
-                if (c_in == input[l - 1] && c_in == input[l + 1] && c_in == input[l + 2] && c_in == input[l + 3])
+                if (c_in == input.ReadByteAt(input_pos - 1) && c_in == input.ReadByteAt(input_pos + 1) && c_in == input.ReadByteAt(input_pos + 2) && c_in == input.ReadByteAt(input_pos + 3))
                 {
-                    int rpt_count = l + 4;
-                    while (rpt_count < input.Length && input[rpt_count] == c_in)
+                    int rpt_count = input_pos + 4;
+                    while (rpt_count < input.Length && input.ReadByteAt(rpt_count) == c_in)
                         rpt_count++;
-                    rpt_count -= l;
+                    rpt_count -= input_pos;
                     AppendCode(ref output, RPT_CODE, ref state, in preset);
                     EncodeCount(ref output, rpt_count - 4);
-                    l += rpt_count;
-                    l--;
+                    input.Position += rpt_count - 1;
                     continue;
                 }
             }
 
-            if (l <= (input.Length - 36) && preset.HCodeLensSpan[(int)SetAndState.Num] != 0)
+            if (input_pos <= (input.Length - 36) && preset.HCodeLensSpan[(int)SetAndState.Num] != 0)
             {
-                if (input[l + 8] == '-' && input[l + 13] == '-' && input[l + 18] == '-' && input[l + 23] == '-')
+                if (input.ReadByteAt(input_pos + 8) == '-' && input.ReadByteAt(input_pos + 13) == '-' && input.ReadByteAt(input_pos + 18) == '-' && input.ReadByteAt(input_pos + 23) == '-')
                 {
                     NibbleType hex_type = NibbleType.Num;
-                    int uid_pos = l;
-                    for (; uid_pos < l + 36; uid_pos++)
+                    int uid_pos = input_pos;
+                    for (; uid_pos < input_pos + 36; uid_pos++)
                     {
-                        byte c_uid = input[uid_pos];
+                        byte c_uid = (byte)input.ReadByteAt(uid_pos);
                         if (c_uid == '-' && (uid_pos is 8 or 13 or 18 or 23))
                             continue;
                         NibbleType nib_type = GetNibbleType(c_uid);
@@ -566,29 +569,29 @@ partial class Unishox
                             hex_type = nib_type;
                         }
                     }
-                    if (uid_pos == l + 36)
+                    if (uid_pos == input_pos + 36)
                     {
                         AppendNibbleEscape(ref output, state, in preset);
                         AppendBits(ref output, hex_type == NibbleType.HexLower ? (byte)0xC0 : (byte)0xF0,
                                hex_type == NibbleType.HexLower ? 3 : 5);
-                        for (uid_pos = l; uid_pos < l + 36; uid_pos++)
+                        for (uid_pos = input_pos; uid_pos < input_pos + 36; uid_pos++)
                         {
-                            byte c_uid = input[uid_pos];
+                            byte c_uid = (byte)input.ReadByteAt(uid_pos);
                             if (c_uid != '-')
                                 AppendBits(ref output, GetBaseCode(c_uid), 4);
                         }
-                        l += 35;
+                        input.Position += 35;
                         continue;
                     }
                 }
             }
-            if (l < (input.Length - 5) && preset.HCodeLensSpan[(int)SetAndState.Num] != 0)
+            if (input_pos < (input.Length - 5) && preset.HCodeLensSpan[(int)SetAndState.Num] != 0)
             {
                 NibbleType hex_type = NibbleType.Num;
                 int hex_len = 0;
                 do
                 {
-                    NibbleType nib_type = GetNibbleType(input[l + hex_len]);
+                    NibbleType nib_type = GetNibbleType((byte)input.ReadByteAt(input_pos + hex_len));
                     if (nib_type == NibbleType.Not)
                         break;
                     if (nib_type != NibbleType.Num)
@@ -598,7 +601,7 @@ partial class Unishox
                         hex_type = nib_type;
                     }
                     hex_len++;
-                } while (l + hex_len < input.Length);
+                } while (input_pos + hex_len < input.Length);
                 if (hex_len > 10 && hex_type == NibbleType.Num)
                     hex_type = NibbleType.HexLower;
                 if ((hex_type == NibbleType.HexLower || hex_type == NibbleType.HexUpper) && hex_len > 3)
@@ -608,9 +611,9 @@ partial class Unishox
                     EncodeCount(ref output, hex_len);
                     do
                     {
-                        AppendBits(ref output, GetBaseCode(input[l++]), 4);
+                        AppendBits(ref output, GetBaseCode((byte)input.ReadByteAt(input_pos++)), 4);
                     } while (--hex_len != 0);
-                    l--;
+                    input.Position = input_pos - 1;
                     continue;
                 }
             }
@@ -624,10 +627,10 @@ partial class Unishox
                         continue;
                     int rem = template.Length;
                     int j = 0;
-                    for (; j < rem && l + j < input.Length; j++)
+                    for (; j < rem && input_pos + j < input.Length; j++)
                     {
                         byte c_t = template[j];
-                        c_in = input[l + j];
+                        c_in = (byte)input.ReadByteAt(input_pos + j);
                         if (c_t is (byte)'f' or (byte)'F')
                         {
                             if (GetNibbleType(c_in) != (c_t == 'f' ? NibbleType.HexLower : NibbleType.HexUpper)
@@ -660,7 +663,7 @@ partial class Unishox
                         {
                             byte c_t = template[k];
                             if (c_t is (byte)'f' or (byte)'F')
-                                AppendBits(ref output, GetBaseCode(input[l + k]), 4);
+                                AppendBits(ref output, GetBaseCode((byte)input.ReadByteAt(input_pos + k)), 4);
                             else if (c_t is (byte)'r' or (byte)'t' or (byte)'o')
                             {
                                 c_t = c_t switch
@@ -669,11 +672,11 @@ partial class Unishox
                                     (byte)'t' => 3,
                                     _ => 1
                                 };
-                                AppendBits(ref output, (byte)((input[l + k] - '0') << (8 - c_t)), c_t);
+                                AppendBits(ref output, (byte)((input.ReadByteAt(input_pos + k) - '0') << (8 - c_t)), c_t);
                             }
                         }
-                        l += j;
-                        l--;
+                        input_pos += j - 1;
+                        input.Position = input_pos;
                         break;
                     }
                 }
@@ -687,13 +690,22 @@ partial class Unishox
                 {
                     ReadOnlySpan<byte> seq = preset.GetFreqSeqSpan(i);
                     int seq_len = seq.Length;
-                    if (input.Length - seq_len >= 0 && l <= input.Length - seq_len)
+                    if (input.Length - seq_len >= 0 && input_pos <= input.Length - seq_len)
                     {
-                        if (seq.SequenceEqual(input.Slice(l, seq_len)) && preset.HCodeLensSpan[FreqCodes[i] >> 5] != 0)
+                        bool flag = true;
+                        for(int k = 0; k < seq_len; k++)
+                        {
+                            if (seq[k] != input.ReadByteAt(input_pos + k))
+                            {
+                                flag = false;
+                                break;
+                            }
+                        }
+                        if (flag && preset.HCodeLensSpan[FreqCodes[i] >> 5] != 0)
                         {
                             AppendCode(ref output, FreqCodes[i], ref state, in preset);
-                            l += seq_len;
-                            l--;
+                            input_pos += seq_len - 1;
+                            input.Position = input_pos;
                             break;
                         }
                     }
@@ -702,9 +714,9 @@ partial class Unishox
                     continue;
             }
 
-            c_in = input[l];
+            c_in = (byte)input.ReadByteAt(input_pos);
 
-            is_upper = false;
+            bool is_upper = false;
             if (c_in is >= (byte)'A' and <= (byte)'Z')
                 is_upper = true;
             else
@@ -734,20 +746,20 @@ partial class Unishox
                     AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
                 }
             }
-            c_next = 0;
-            if (l + 1 < input.Length)
-                c_next = input[l + 1];
+
+            byte c_next = input_pos + 1 < input.Length ? (byte)input.ReadByteAt(input_pos + 1) : (byte)0;
 
             if (c_in >= 32 && c_in <= 126)
             {
                 if (is_upper && !is_all_upper)
                 {
-                    for (ll = l + 4; ll >= l && ll < input.Length; ll--)
+                    int ll = input_pos + 4;
+                    for (; ll >= input_pos && ll < input.Length; ll--)
                     {
-                        if (input[ll] is < (byte)'A' or > (byte)'Z')
+                        if (input.ReadByteAt(ll) is < (byte)'A' or > (byte)'Z')
                             break;
                     }
-                    if (ll == l - 1)
+                    if (ll == input_pos - 1)
                     {
                         AppendSwitchCode(ref output, state);
                         AppendBits(ref output, preset.HCodesSpan[(int)SetAndState.Alpha], preset.HCodeLensSpan[(int)SetAndState.Alpha]);
@@ -791,13 +803,13 @@ partial class Unishox
                 else
                 {
                     c_in--;
-                    AppendCode(ref output, Code94[(int)c_in], ref state, in preset);
+                    AppendCode(ref output, Code94[c_in], ref state, in preset);
                 }
             }
             else if (c_in == 13 && c_next == 10)
             {
                 AppendCode(ref output, CRLF_CODE, ref state, in preset);
-                l++;
+                input.Position = input_pos + 1;
             }
             else if (c_in == 10)
             {
@@ -815,13 +827,13 @@ partial class Unishox
                 AppendCode(ref output, TAB_CODE, ref state, in preset);
             else
             {
-                int uni = ReadUTF8(input, l, out int utf8len);
+                int uni = ReadUTF8(ref input, out int utf8len);
                 if (uni != 0)
                 {
-                    l += utf8len;
+                    input.Position = input_pos += utf8len;
                     if (state != SetAndState.Delta)
                     {
-                        int uni2 = ReadUTF8(input, l, out utf8len);
+                        int uni2 = ReadUTF8(ref input, out _);
                         if (uni2 != 0)
                         {
                             if (state != SetAndState.Alpha)
@@ -842,17 +854,17 @@ partial class Unishox
                     }
                     EncodeUnicode(ref output, uni, prev_uni);
                     prev_uni = uni;
-                    l--;
+                    input.Position = input_pos - 1;
                 }
                 else
                 {
                     int bin_count = 1;
-                    for (int bi = l + 1; bi < input.Length; bi++)
+                    for (int bi = input_pos + 1, offset = 1; bi < input.Length; bi++, offset++)
                     {
-                        byte c_bi = input[bi];
-                        if (ReadUTF8(input, bi, out _) != 0)
+                        int c_bi = input.ReadByteAt(bi);
+                        if (ReadUTF8(ref input, out _, offset) != 0)
                             break;
-                        if (bi < (input.Length - 4) && c_bi == input[bi - 1] && c_bi == input[bi + 1] && c_bi == input[bi + 2] && c_bi == input[bi + 3])
+                        if (bi < (input.Length - 4) && c_bi == input.ReadByteAt(bi - 1) && c_bi == input.ReadByteAt(bi + 1) && c_bi == input.ReadByteAt(bi + 2) && c_bi == input.ReadByteAt(bi + 3))
                             break;
                         bin_count++;
                     }
@@ -861,9 +873,9 @@ partial class Unishox
                     EncodeCount(ref output, bin_count);
                     do
                     {
-                        AppendBits(ref output, input[l++], 8);
+                        AppendBits(ref output, (byte)input.ReadByteAt(input_pos++), 8);
                     } while (--bin_count != 0);
-                    l--;
+                    input.Position = input_pos - 1;
                 }
             }
         }
