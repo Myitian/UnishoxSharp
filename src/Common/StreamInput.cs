@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace UnishoxSharp.Common;
@@ -7,7 +8,8 @@ namespace UnishoxSharp.Common;
 public struct StreamInput(Stream stream) : IUnishoxDataInput
 {
     private int last = 0;
-    private bool read = false, eof = false;
+    private bool eof = false;
+    private byte read = 0;
     public Stream BaseStream { get; } = stream;
     public int BitPos { get; private set; } = 0;
     public int Position { get; private set; } = 0;
@@ -24,12 +26,15 @@ public struct StreamInput(Stream stream) : IUnishoxDataInput
 
     public int ReadBit(bool autoForward)
     {
-        if (!read)
+        if (read == 0)
             ReadByte();
-        int result = last & (0x80 >> BitPos);
+        int result = (last >> ((read - 1) << 3)) & (0x80 >> BitPos);
         if (autoForward && ++BitPos == 8)
         {
-            ReadByte();
+            if (read == 0)
+                ReadByte();
+            else
+                read--;
             BitPos = 0;
             Position++;
         }
@@ -42,17 +47,17 @@ public struct StreamInput(Stream stream) : IUnishoxDataInput
         if (rb < 0)
             eof = true;
         last = (last << 8) | (rb & 0xFF);
-        read = true;
+        read++;
     }
 
-    /// <param name="offset">offset out of range [24+BitPos, 0] is undefined behavior!</param>
+    /// <param name="offset">offset out of range [-16, 0] is undefined behavior!</param>
     public int Read8Bit(bool autoForward, int offset)
     {
         int bit_pos = BitPos + offset;
-        int char_pos = -(bit_pos >> 3);
-        bit_pos &= 7;
-        if (!read)
+        if (read == 0)
             ReadByte();
+        int char_pos = read - (bit_pos >> 3) - 1;
+        bit_pos &= 7;
         byte code = (byte)((last >> (char_pos << 3)) << bit_pos);
         if (char_pos == 0)
             ReadByte();
@@ -60,17 +65,23 @@ public struct StreamInput(Stream stream) : IUnishoxDataInput
             char_pos--;
         code |= (byte)(((last >> (char_pos << 3)) & 0xFF) >> (8 - bit_pos));
         if (autoForward)
+        {
+            read--;
             Position++;
+        }
         return code;
     }
     public void Skip(int count)
     {
         int newPos = BitPos + count;
-        if (!read)
+        if (read == 0)
             ReadByte();
         while (newPos > 8)
         {
-            ReadByte();
+            if (read == 0)
+                ReadByte();
+            else
+                read--;
             newPos -= 8;
             Position++;
         }

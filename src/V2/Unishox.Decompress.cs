@@ -252,13 +252,13 @@ partial class Unishox
         }
         else
         {
-            int dict_len = ReadCount(ref input) + NICE_LEN;
-            if (dict_len < NICE_LEN)
+            int dict_len = ReadCount(ref input);
+            if (dict_len < 0)
                 return false;
-            int dist = ReadCount(ref input) + NICE_LEN - 1;
-            if (dist < NICE_LEN - 1)
+            int dist = ReadCount(ref input);
+            if (dist < 0)
                 return false;
-            output.CopyFrom(-dist, dict_len);
+            output.CopyFrom(1 - NICE_LEN - dist, NICE_LEN + dict_len);
         }
         return true;
     }

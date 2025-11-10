@@ -18,14 +18,14 @@ class Program
         while (Console.ReadLine() is string line)
         {
             byte[] src = Encoding.UTF8.GetBytes(line);
+            Console.WriteLine($"src :{BytesToString(src)}");
+            Console.WriteLine($"srcs:{src.Length}");
 
             msTest.SetLength(0);
             int lenV1cC = UnishoxV1.CompressCount(src, linkList);
             int lenV1c = UnishoxV1.Compress(src, msTest, linkList);
             byte[] dataV1c = msTest.ToArray();
-            msTest.SetLength(0);
-            int lenV1Ld = UnishoxV1.LegacyDecompress(dataV1c, msTest, linkList);
-            byte[] dataV1Ld = msTest.ToArray();
+            Console.WriteLine($"V1c :{BytesToString(dataV1c)}");
             msTest.SetLength(0);
             bk.SetLength(0);
             bk.Write(dataV1c);
@@ -34,44 +34,43 @@ class Program
             bk.Position = 0;
             int lenV1d = UnishoxV1.Decompress(ns, msTest, linkList);
             byte[] dataV1d = msTest.ToArray();
+            Console.WriteLine($"V1d :{BytesToString(dataV1d)}");
+            Console.WriteLine($"V1x:{Encoding.UTF8.GetString(dataV1d)}");
             bool statusV1 = src.AsSpan().SequenceEqual(dataV1d);
+            Console.WriteLine($"V1s :{lenV1cC}/{lenV1c} {lenV1dC}/{lenV1d} {statusV1}");
 
             msTest.SetLength(0);
-            int lenV2cC = UnishoxV2.CompressCount(src, linkList);
-            int lenV2c = UnishoxV2.Compress(src, msTest, linkList);
-            byte[] dataV2c = msTest.ToArray();
+            int lenV2FcC = UnishoxV2.CompressCount(src, linkList, true);
+            int lenV2Fc = UnishoxV2.Compress(src, msTest, linkList, true);
+            byte[] dataV2Fc = msTest.ToArray();
+            Console.WriteLine($"V2Fc:{BytesToString(dataV2Fc)}");
             msTest.SetLength(0);
             bk.SetLength(0);
-            bk.Write(dataV2c);
+            bk.Write(dataV2Fc);
+            bk.Write("123456789"u8); // Extra data test
             bk.Position = 0;
-            int lenV2dC = UnishoxV2.DecompressCount(ns, linkList);
+            int lenV2FdC = UnishoxV2.DecompressCount(bk, linkList);
             bk.Position = 0;
-            int lenV2d = UnishoxV2.Decompress(ns, msTest, linkList);
-            byte[] dataV2d = msTest.ToArray();
-            bool statusV2 = src.AsSpan().SequenceEqual(dataV2d);
+            int lenV2Fd = UnishoxV2.Decompress(bk, msTest, linkList);
+            byte[] dataV2Fd = msTest.ToArray();
+            Console.WriteLine($"V2Fd:{BytesToString(dataV2Fd)}");
+            Console.WriteLine($"V2Fx:{Encoding.UTF8.GetString(dataV2Fd)}");
+            bool statusV2F = src.AsSpan().SequenceEqual(dataV2Fd);
+            Console.WriteLine($"V2Fs:{lenV2FcC}/{lenV2Fc} {lenV2FdC}/{lenV2Fd} {statusV2F}");
 
             msTest.SetLength(0);
-            int lenV2TcC = UnishoxV2.CompressCount(src, linkList, true);
-            int lenV2Tc = UnishoxV2.Compress(src, msTest, linkList, true);
-            byte[] dataV2Tc = msTest.ToArray();
+            int lenV2NcC = UnishoxV2.CompressCount(src, linkList);
+            int lenV2Nc = UnishoxV2.Compress(src, msTest, linkList);
+            byte[] dataV2Nc = msTest.ToArray();
+            Console.WriteLine($"V2Nc:{BytesToString(dataV2Nc)}");
             msTest.SetLength(0);
-            int lenV2TdC = UnishoxV2.DecompressCount(dataV2c, linkList);
-            int lenV2Td = UnishoxV2.Decompress(dataV2c, msTest, linkList);
-            byte[] dataV2Td = msTest.ToArray();
-            bool statusV2T = src.AsSpan().SequenceEqual(dataV2Td);
-
-            Console.WriteLine($"src :{BytesToString(src)}");
-            Console.WriteLine($"srcs:{src.Length}");
-            Console.WriteLine($"V1c :{BytesToString(dataV1c)}");
-            Console.WriteLine($"V1d :{BytesToString(dataV1d)}");
-            Console.WriteLine($"V1d :{BytesToString(dataV1Ld)}");
-            Console.WriteLine($"V1s :{lenV1cC}/{lenV1c} {lenV1dC}/{lenV1d} {statusV1}");
-            Console.WriteLine($"V2c :{BytesToString(dataV2c)}");
-            Console.WriteLine($"V2d :{BytesToString(dataV2d)}");
-            Console.WriteLine($"V2s :{lenV2cC}/{lenV2c} {lenV2dC}/{lenV2d} {statusV2}");
-            Console.WriteLine($"V2Tc:{BytesToString(dataV2Tc)}");
-            Console.WriteLine($"V2Td:{BytesToString(dataV2Td)}");
-            Console.WriteLine($"V2Ts:{lenV2TcC}/{lenV2Tc} {lenV2TdC}/{lenV2Td} {statusV2T}");
+            int lenV2NdC = UnishoxV2.DecompressCount(dataV2Fc, linkList);
+            int lenV2Nd = UnishoxV2.Decompress(dataV2Fc, msTest, linkList);
+            byte[] dataV2Nd = msTest.ToArray();
+            Console.WriteLine($"V2Nd:{BytesToString(dataV2Nd)}");
+            Console.WriteLine($"V2Nx:{Encoding.UTF8.GetString(dataV2Nd)}");
+            bool statusV2N = src.AsSpan().SequenceEqual(dataV2Nd);
+            Console.WriteLine($"V2Ns:{lenV2NcC}/{lenV2Nc} {lenV2NdC}/{lenV2Nd} {statusV2N}");
             linkList = new()
             {
                 Data = src,
@@ -82,21 +81,23 @@ class Program
     }
 
     static readonly MemoryStream msTest = new();
+    static readonly MemoryStream msT2 = new();
     static bool DoTest(scoped ReadOnlySpan<byte> chars)
     {
         msTest.SetLength(0);
-        int len = UnishoxV2.Compress(chars, msTest, null);
+        int len = UnishoxV2.Compress(chars, msTest, null, true);
         byte[] data = msTest.ToArray();
-
+        msT2.SetLength(0);
+        msTest.Position = 0;
+        msTest.CopyTo(msT2);
         msTest.SetLength(0);
-        //Console.WriteLine($"*LD");
-        int len3 = UnishoxV2.LegacyDecompress(data, msTest, null);
-        byte[] data3 = msTest.ToArray();
-
-        msTest.SetLength(0);
-        //Console.WriteLine($"*ND");
-        int len2 = UnishoxV2.Decompress(data, msTest, null);
+        //msT2.Write("abcdefg"u8); // Extra data test
+        msT2.Position = 0;
+        int len2 = UnishoxV2.Decompress(msT2, msTest, null);
         byte[] data2 = msTest.ToArray();
+        msTest.SetLength(0);
+        int len3 = UnishoxV2.Decompress(msT2.ToArray(), msTest, null);
+        byte[] data3 = msTest.ToArray();
 
         msTest.SetLength(0);
         bool status = chars.SequenceEqual(data2);
