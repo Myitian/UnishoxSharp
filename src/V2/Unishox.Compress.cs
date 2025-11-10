@@ -7,8 +7,8 @@ partial class Unishox
     /// <summary>
     /// Appends specified number of bits to the output (out)
     /// </summary>
-    static void AppendBits<T>(ref T output, byte code, int clen)
-        where T : IUnishoxDataOutput, allows ref struct
+    static void AppendBits<TOut>(ref TOut output, byte code, int clen)
+        where TOut : IUnishoxDataOutput, allows ref struct
     {
         output.WriteBits((ushort)(code << 8), clen);
     }
@@ -16,8 +16,8 @@ partial class Unishox
     /// <summary>
     /// Appends switch code to out depending on the state (<see cref="SetAndState.Delta" /> or other)
     /// </summary>
-    static void AppendSwitchCode<T>(ref T output, SetAndState state)
-        where T : IUnishoxDataOutput, allows ref struct
+    static void AppendSwitchCode<TOut>(ref TOut output, SetAndState state)
+        where TOut : IUnishoxDataOutput, allows ref struct
     {
         if (state == SetAndState.Delta)
         {
@@ -31,8 +31,8 @@ partial class Unishox
     /// <summary>
     /// Appends given horizontal and veritical code bits to out
     /// </summary>
-    static void AppendCode<T, TPreset>(ref T output, byte code, ref SetAndState state, in TPreset preset)
-        where T : IUnishoxDataOutput, allows ref struct
+    static void AppendCode<TOut, TPreset>(ref TOut output, byte code, ref SetAndState state, in TPreset preset)
+        where TOut : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
         int hcode = code >> 5;
@@ -76,8 +76,8 @@ partial class Unishox
     /// <summary>
     /// Encodes given count to out
     /// </summary>
-    static void EncodeCount<T>(ref T output, int count)
-        where T : IUnishoxDataOutput, allows ref struct
+    static void EncodeCount<TOut>(ref TOut output, int count)
+        where TOut : IUnishoxDataOutput, allows ref struct
     {
         // First five bits are code and Last three bits of codes represent length
         for (int i = 0; i < 5; i++)
@@ -98,17 +98,17 @@ partial class Unishox
         }
     }
 
+    static ReadOnlySpan<byte> UniCodes => [0x01, 0x82, 0xC3, 0xE4, 0xF5, 0xFD];
     /// Length of bits used to represent delta code for each level
     static ReadOnlySpan<byte> UniBitLen => [6, 12, 14, 16, 21];
     /// Cumulative delta codes represented at each level
     static ReadOnlySpan<int> UniAdder => [0, 64, 4160, 20544, 86080];
 
     /// Encodes the unicode code point given by code to out. prev_code is used to calculate the delta
-    static void EncodeUnicode<T>(ref T output, int code, int prev_code)
-        where T : IUnishoxDataOutput, allows ref struct
+    static void EncodeUnicode<TOut>(ref TOut output, int code, int prev_code)
+        where TOut : IUnishoxDataOutput, allows ref struct
     {
         // First five bits are code and Last three bits of codes represent length
-        ReadOnlySpan<byte> codes = [0x01, 0x82, 0xC3, 0xE4, 0xF5, 0xFD];
         int till = 0;
         int diff = code - prev_code;
         if (diff < 0)
@@ -118,7 +118,7 @@ partial class Unishox
             till += 1 << UniBitLen[i];
             if (diff < till)
             {
-                AppendBits(ref output, (byte)(codes[i] & 0xF8), codes[i] & 0x07);
+                AppendBits(ref output, (byte)(UniCodes[i] & 0xF8), UniCodes[i] & 0x07);
                 AppendBits(ref output, prev_code > code ? (byte)0x80 : (byte)0, 1);
                 int val = diff - UniAdder[i];
                 if (UniBitLen[i] > 16)
@@ -203,16 +203,8 @@ partial class Unishox
     /// This is also used for Unicode strings<br />
     /// This is a crude implementation that is not optimized. Assuming only short strings are encoded, this is not much of an issue.
     /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <typeparam name="TPreset"></typeparam>
-    /// <param name="input"></param>
-    /// <param name="l"></param>
-    /// <param name="output"></param>
-    /// <param name="state"></param>
-    /// <param name="preset"></param>
-    /// <returns></returns>
-    static int MatchOccurance<T, TPreset>(scoped ReadOnlySpan<byte> input, int l, ref T output, ref SetAndState state, in TPreset preset)
-        where T : IUnishoxDataOutput, allows ref struct
+    static int MatchOccurance<TOut, TPreset>(scoped ReadOnlySpan<byte> input, int l, ref TOut output, ref SetAndState state, in TPreset preset)
+        where TOut : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
         int j, k;
@@ -259,8 +251,8 @@ partial class Unishox
     /// This is also used for Unicode strings<br />
     /// This is a crude implementation that is not optimized. Assuming only short strings are encoded, this is not much of an issue.
     /// </summary>
-    static int MatchLine<T, TPreset>(scoped ReadOnlySpan<byte> input, int l, ref T output, UnishoxLinkList? prev_lines, ref SetAndState state, in TPreset preset)
-        where T : IUnishoxDataOutput, allows ref struct
+    static int MatchLine<TOut, TPreset>(scoped ReadOnlySpan<byte> input, int l, ref TOut output, UnishoxLinkList? prev_lines, ref SetAndState state, in TPreset preset)
+        where TOut : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
         int last_op = output.Position;
@@ -347,8 +339,8 @@ partial class Unishox
     /// <summary>
     /// Starts coding of nibble sets
     /// </summary>
-    static void AppendNibbleEscape<T, TPreset>(ref T output, SetAndState state, in TPreset preset)
-        where T : IUnishoxDataOutput, allows ref struct
+    static void AppendNibbleEscape<TOut, TPreset>(ref TOut output, SetAndState state, in TPreset preset)
+        where TOut : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
         AppendSwitchCode(ref output, state);
@@ -359,8 +351,8 @@ partial class Unishox
     /// <summary>
     /// Appends the terminator code depending on the state, preset and whether full terminator needs to be encoded to out or not
     /// </summary>
-    static void AppendFinalBits<T, TPreset>(ref T output, SetAndState state, bool is_all_upper, in TPreset preset)
-        where T : IUnishoxDataOutput, allows ref struct
+    static void AppendFinalBits<TOut, TPreset>(ref TOut output, SetAndState state, bool is_all_upper, in TPreset preset)
+        where TOut : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
         if (output.RemainingBits == 0)
@@ -404,8 +396,8 @@ partial class Unishox
     /// <summary>
     /// Appends the terminator code depending on the state, preset and whether full terminator needs to be encoded to out or not
     /// </summary>
-    static void AppendFinalBitsFull<T, TPreset>(ref T output, SetAndState state, bool is_all_upper, in TPreset preset)
-        where T : IUnishoxDataOutput, allows ref struct
+    static void AppendFinalBitsFull<TOut, TPreset>(ref TOut output, SetAndState state, bool is_all_upper, in TPreset preset)
+        where TOut : IUnishoxDataOutput, allows ref struct
         where TPreset : IUnishoxPreset, allows ref struct
     {
         if (preset.HCodeLensSpan[(int)SetAndState.Alpha] != 0)
@@ -499,8 +491,8 @@ partial class Unishox
         Compress(input, ref o, in preset, prev_lines, need_full_term_codes, magic_bits, magic_bit_len);
         return o.Position;
     }
-    public static void Compress<T, TPreset>(scoped ReadOnlySpan<byte> input, ref T output, in TPreset preset, UnishoxLinkList? prev_lines = null, bool need_full_term_codes = false, byte magic_bits = 0xFF, int magic_bit_len = 1)
-         where T : IUnishoxDataOutput, allows ref struct
+    public static void Compress<TOut, TPreset>(scoped ReadOnlySpan<byte> input, ref TOut output, in TPreset preset, UnishoxLinkList? prev_lines = null, bool need_full_term_codes = false, byte magic_bits = 0xFF, int magic_bit_len = 1)
+         where TOut : IUnishoxDataOutput, allows ref struct
          where TPreset : IUnishoxPreset, allows ref struct
     {
         ArgumentOutOfRangeException.ThrowIfNegative(magic_bit_len);

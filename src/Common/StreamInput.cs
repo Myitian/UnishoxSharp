@@ -1,29 +1,54 @@
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace UnishoxSharp.Common;
 
 [StructLayout(LayoutKind.Auto)]
-public struct StreamInput(Stream stream) : IUnishoxDataInput
+public struct StreamInput : IUnishoxTextInput, IUnishoxDataInput
 {
     private int last = 0;
     private bool eof = false;
     private byte read = 0;
-    public Stream BaseStream { get; } = stream;
-    public int BitPos { get; private set; } = 0;
-    public int Position { get; private set; } = 0;
+    private int lastPos = 0;
 
+    public StreamInput(Stream stream)
+    {
+        BaseStream = stream;
+        if (!stream.CanSeek)
+        {
+            Length = int.MaxValue;
+            return;
+        }
+        try
+        {
+            Length = (int)(stream.Length - stream.Position);
+        }
+        catch
+        {
+            Length = int.MaxValue;
+        }
+    }
+
+    public readonly Stream BaseStream { get; }
+    public int BitPos { readonly get; private set; } = 0;
+    public int Position { readonly get; set; } = 0;
+    public readonly int Length { get; }
+    public int ReadByteAt(int position)
+    {
+        if (position == lastPos + 1)
+            lastPos++;
+        else
+            BaseStream.Seek(lastPos = position - Position, SeekOrigin.Current);
+        return BaseStream.ReadByte();
+    }
     public readonly bool CanRead(int count = 1)
     {
         if (!BaseStream.CanRead || eof)
             return false;
         if (!BaseStream.CanSeek)
             return true;
-        long diff = ((BaseStream.Length - Position) << 3) - BitPos;
+        long diff = ((Length - Position) << 3) - BitPos;
         return diff >= count;
     }
-
     public int ReadBit(bool autoForward)
     {
         if (read == 0)
@@ -43,7 +68,6 @@ public struct StreamInput(Stream stream) : IUnishoxDataInput
         }
         return result;
     }
-
     private void ReadByte()
     {
         int rb = BaseStream.ReadByte();
@@ -52,7 +76,6 @@ public struct StreamInput(Stream stream) : IUnishoxDataInput
         last = (last << 8) | (rb & 0xFF);
         read++;
     }
-
     /// <param name="offset">offset out of range [-16, 0] is undefined behavior!</param>
     public int Read8Bit(bool autoForward, int offset)
     {

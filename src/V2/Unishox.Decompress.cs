@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using UnishoxSharp.Common;
 
 namespace UnishoxSharp.V2;

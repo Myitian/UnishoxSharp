@@ -13,9 +13,9 @@ class Program
         Console.OutputEncoding = Encoding.UTF8;
         if (!Check())
             return 1;
+        Console.WriteLine("TEST PASSED!");
         using MemoryStream bk = new();
         using StreamNoSeek ns = new(bk);
-        Console.WriteLine("TEST PASSED!");
         UnishoxLinkList? linkList = null;
         while (Console.ReadLine() is string line)
         {
@@ -29,12 +29,8 @@ class Program
             byte[] dataV1c = msTest.ToArray();
             Console.WriteLine($"V1c :{BytesToString(dataV1c)}");
             msTest.SetLength(0);
-            bk.SetLength(0);
-            bk.Write(dataV1c);
-            bk.Position = 0;
-            int lenV1dC = UnishoxV1.DecompressCount(ns, linkList);
-            bk.Position = 0;
-            int lenV1d = UnishoxV1.Decompress(ns, msTest, linkList);
+            int lenV1dC = UnishoxV1.DecompressCount(dataV1c, linkList);
+            int lenV1d = UnishoxV1.Decompress(dataV1c, msTest, linkList);
             byte[] dataV1d = msTest.ToArray();
             Console.WriteLine($"V1d :{BytesToString(dataV1d)}");
             Console.WriteLine($"V1x :{Encoding.UTF8.GetString(dataV1d)}");
@@ -105,6 +101,38 @@ class Program
         bool status = chars.SequenceEqual(data2);
         if (!status)
         {
+            Console.WriteLine("V2 FAILED!");
+            Console.WriteLine(BytesToString(chars));
+            Console.WriteLine(BytesToString(data));
+            Console.WriteLine(BytesToString(data.AsSpan(0, len)));
+            Console.WriteLine(BytesToString(data2));
+            Console.WriteLine(BytesToString(data2.AsSpan(0, len2)));
+            Console.WriteLine(BytesToString(data3));
+            Console.WriteLine(BytesToString(data3.AsSpan(0, len3)));
+        }
+        return status && DoTestV1(chars);
+    }
+    static bool DoTestV1(scoped ReadOnlySpan<byte> chars)
+    {
+        msTest.SetLength(0);
+        int len = UnishoxV1.Compress(chars, msTest, null, true);
+        byte[] data = msTest.ToArray();
+        msT2.SetLength(0);
+        msTest.Position = 0;
+        msTest.CopyTo(msT2);
+        msTest.SetLength(0);
+        msT2.Position = 0;
+        int len2 = UnishoxV1.Decompress(msT2, msTest, null);
+        byte[] data2 = msTest.ToArray();
+        msTest.SetLength(0);
+        int len3 = UnishoxV1.Decompress(msT2.ToArray(), msTest, null);
+        byte[] data3 = msTest.ToArray();
+
+        msTest.SetLength(0);
+        bool status = chars.SequenceEqual(data2);
+        if (!status)
+        {
+            Console.WriteLine("V1 FAILED!");
             Console.WriteLine(BytesToString(chars));
             Console.WriteLine(BytesToString(data));
             Console.WriteLine(BytesToString(data.AsSpan(0, len)));

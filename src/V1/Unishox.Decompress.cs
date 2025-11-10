@@ -61,15 +61,15 @@ partial class Unishox
         return ret;
     }
 
+    static ReadOnlySpan<byte> CountBitLenR => [5, 2, 7, 9, 12, 16, 17];
+    static ReadOnlySpan<ushort> CountAdderR => [4, 0, 36, 164, 676, 4772, 0];
     static int ReadCount<TIn>(ref TIn input)
         where TIn : IUnishoxDataInput, allows ref struct
     {
-        ReadOnlySpan<byte> bit_len = [5, 2, 7, 9, 12, 16, 17];
-        ReadOnlySpan<ushort> adder = [4, 0, 36, 164, 676, 4772, 0];
         int idx = GetCodeIdx(HCode, ref input);
         if (idx > 6)
             return 0;
-        int count = GetNumFromBits(ref input, bit_len[idx]) + adder[idx];
+        int count = GetNumFromBits(ref input, CountBitLenR[idx]) + CountAdderR[idx];
         return count;
     }
 
@@ -97,8 +97,8 @@ partial class Unishox
         return 0;
     }
 
-    static void WriteUTF8<T>(ref T output, int uni)
-        where T : IUnishoxTextOutput, allows ref struct
+    static void WriteUTF8<TOut>(ref TOut output, int uni)
+        where TOut : IUnishoxTextOutput, allows ref struct
     {
         if (uni < (1 << 11))
         {
